@@ -37,3 +37,4 @@ body {
 .status { grid-area: status; display: flex; gap: 12px; align-items: center; color: var(--muted); }
 .status .spacer { flex: 1; }
 .mode { background: var(--accent); color: var(--crust); padding: 1px 8px; }
+.red { color: var(--red); }

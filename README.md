@@ -4,3 +4,4 @@ my own take on system shell that would be the best for programing and using staf
 # Stage 
 * mockup look and style DONE
 * TODO : read_dir(path)
+
