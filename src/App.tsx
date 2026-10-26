@@ -1,51 +1,70 @@
-import { useState } from "react";
-import reactLogo from "./assets/react.svg";
-import { invoke } from "@tauri-apps/api/core";
+import { useEffect, type ReactNode } from "react";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import "./App.css";
 
-function App() {
-  const [greetMsg, setGreetMsg] = useState("");
-  const [name, setName] = useState("");
-
-  async function greet() {
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    setGreetMsg(await invoke("greet", { name }));
-  }
-
+function Panel({ title, area, active, children }: {
+  title: string; area: string; active?: boolean; children?: ReactNode;
+}) {
   return (
-    <main className="container">
-      <h1>Welcome to Tauri + React</h1>
-
-      <div className="row">
-        <a href="https://vite.dev" target="_blank">
-          <img src="/vite.svg" className="logo vite" alt="Vite logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank">
-          <img src="/tauri.svg" className="logo tauri" alt="Tauri logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <p>Click on the Tauri, Vite, and React logos to learn more.</p>
-
-      <form
-        className="row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          greet();
-        }}
-      >
-        <input
-          id="greet-input"
-          onChange={(e) => setName(e.currentTarget.value)}
-          placeholder="Enter a name..."
-        />
-        <button type="submit">Greet</button>
-      </form>
-      <p>{greetMsg}</p>
-    </main>
+    <section className={`panel ${active ? "active" : ""}`} style={{ gridArea: area }}>
+      <header className="panel-title">{title}</header>
+      <div className="panel-body">{children}</div>
+    </section>
   );
 }
 
-export default App;
+const files = [
+  ["src", "dir", "—"],
+  ["src-tauri", "dir", "—"],
+  ["package.json", "json", "590 B"],
+  ["vite.config.ts", "ts", "891 B"],
+  ["README.md", "md", "385 B"],
+];
+
+export default function App() {
+  // Ctrl+Q zamyka aplikację (bo nie ma ramki z krzyżykiem)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.key.toLowerCase() === "q") getCurrentWindow().close();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  return (
+    <div className="shell">
+      <Panel title="wikexp" area="tree">
+        <div className="row muted">C:\</div>
+        <div className="row">  devWikExp</div>
+        <div className="row sel">    WikExp</div>
+        <div className="row">  Users</div>
+      </Panel>
+
+      <Panel title="C:\devWikExp\WikExp" area="main" active>
+        <div className="row head"><span className="c-name">NAME</span><span className="c-type">TYPE</span><span>SIZE</span></div>
+        {files.map(([name, type, size], i) => (
+          <div key={name} className={`row ${i === 0 ? "sel" : ""}`}>
+            <span className="c-name">{name}</span><span className="c-type">{type}</span><span>{size}</span>
+          </div>
+        ))}
+      </Panel>
+
+      <Panel title="terminal" area="term">
+        <div className="row"><span className="accent">PS C:\devWikExp\WikExp&gt;</span> _</div>
+      </Panel>
+
+      <Panel title="procesy" area="side">
+        <div className="row"><span className="green">▶</span> docker-desktop</div>
+        <div className="row"><span className="green">▶</span> code</div>
+        <div className="row"><span className="muted">■</span> postgres</div>
+      </Panel>
+
+      <footer className="status">
+        <span className="mode">NORMAL</span>
+        <span>WikExp › src</span>
+        <span className="spacer" />
+        <span>ctrl+q quit</span>
+      </footer>
+    </div>
+  );
+}
