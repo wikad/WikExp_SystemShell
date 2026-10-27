@@ -50,14 +50,18 @@ async fn read_dir(path: String) -> Result<Vec<FileEntry>,String>{
 
 }
 
-
+#[tauri::command]
+fn parent_dir(path: String) -> Option<String> {
+    let path = std::path::Path::new(&path);
+    path.parent().map(|p| p.to_string_lossy().into_owned())
+}
 
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![greet,read_dir])
+        .invoke_handler(tauri::generate_handler![greet,read_dir,parent_dir])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

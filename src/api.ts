@@ -18,3 +18,5 @@ export function formatSize(b: number){
     if(b<1024 ** 3) return '${(b/1024 **2).toFixed(1)} MB';
     return '${(b/1024 **3).toFixed(1)} GB';
 }
+
+export const parentDir = (path:string) => invoke<string | null>("parent_dir",{path});
