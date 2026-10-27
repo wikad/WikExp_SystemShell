@@ -38,3 +38,29 @@ body {
 .status .spacer { flex: 1; }
 .mode { background: var(--accent); color: var(--crust); padding: 1px 8px; }
 .red { color: var(--red); }
+/* cały pasek */
+::-webkit-scrollbar {
+  width: 6px;        /* pionowy */
+  height: 6px;       /* poziomy */
+}
+
+/* tor, po którym jeździ suwak */
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* sam suwak */
+::-webkit-scrollbar-thumb {
+  background: var(--overlay);
+  border-radius: 4px;
+}
+
+/* po najechaniu myszką */
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent);
+}
+
+/* róg, gdzie stykają się pionowy i poziomy */
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
