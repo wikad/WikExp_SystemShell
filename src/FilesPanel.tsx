@@ -3,6 +3,7 @@ import { homeDir } from "@tauri-apps/api/path";
 import { formatSize, parentDir, readDir, readTextFile, writeTextFile, type FileEntry } from "./api";
 import { Editor } from "./Editor";
 import { useSettings } from "./settings";
+import { useGit, gitStatusOf } from "./useGit";
 
 export type OpenFile = { path: string; dirty: boolean };
 
@@ -50,6 +51,7 @@ export function FilesPanel({ active, initialPath, goTo, onCwd, onOpenFile }: {
   const [allFiles, setFiles] = useState<FileEntry[]>([]);
   const { showHidden } = useSettings().settings;
   const files = showHidden ? allFiles : allFiles.filter((f) => !f.hidden);
+  const git = useGit(cwd);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState(0);
 
@@ -183,7 +185,7 @@ export function FilesPanel({ active, initialPath, goTo, onCwd, onOpenFile }: {
           onClick={() => setSelected(i)}
           onDoubleClick={() => (f.isDir ? dispatch({ type: "go", path: f.path }) : openFile(f.path))}
         >
-          <span className={`c-name ellipsis ${f.isDir ? "accent" : ""}`}>{f.isDir ? f.name + "\\" : f.name}</span>
+          <span className={`c-name ellipsis ${f.isDir ? "accent" : ""} git-${gitStatusOf(git, f.path, f.isDir)}`}>{f.isDir ? f.name + "\\" : f.name}</span>
           <span className="c-type">{f.isDir ? "dir" : f.name.split(".").pop()}</span>
           <span className="c-size">{f.isDir ? "—" : formatSize(f.size)}</span>
         </div>

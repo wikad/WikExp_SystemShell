@@ -11,6 +11,7 @@ import { DockerPanel } from "./DockerPanel";
 import { MonitorPanel } from "./MonitorPanel";
 import { SettingsPanel } from "./SettingsPanel";
 import { AppPanel, type Docked } from "./AppPanel";
+import { GitPanel } from "./GitPanel";
 import { listen } from "@tauri-apps/api/event";
 import { Workspace, type PanelView } from "./Workspace";
 import { loadLayout, saveLayout, growTo, largestFreeAnywhere, newId, splitPanel, DEFAULT_LAYOUT, PANEL_NAMES, type PanelId, type PanelKind, type Rect } from "./layout";
@@ -77,7 +78,7 @@ function findNeighbor(from: PanelId, dir: Dir, recent: PanelId[]): PanelId | nul
 
 const MODE: Record<PanelKind | "editor", string> = {
     editor: "EDYCJA",
-    tree: "NORMAL", files: "NORMAL", terminal: "TERMINAL", side: "PROCESY", docker: "DOCKER", monitor: "MONITOR", settings: "USTAWIENIA", app: "PROGRAM",
+    tree: "NORMAL", files: "NORMAL", terminal: "TERMINAL", side: "PROCESY", docker: "DOCKER", monitor: "MONITOR", settings: "USTAWIENIA", app: "PROGRAM", git: "GIT",
   };
 
 // ostatnie foldery paneli plików, żeby po restarcie każdy wrócił tam, gdzie był
@@ -288,6 +289,11 @@ export default function App() {
               openPaths={openPaths}
             />
           ),
+        };
+      case "git":
+        return {
+          title: instanceTitle(r),
+          body: <GitPanel cwd={linkedFiles ? cwds[linkedFiles] ?? null : null} active={isActive} />,
         };
       case "terminal":
         return { title: instanceTitle(r), body: <TerminalPanel sessionId={r.id} active={isActive} /> };

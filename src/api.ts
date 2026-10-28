@@ -72,3 +72,22 @@ export const appIcons = (targets: string[]) => invoke<(string | null)[]>("app_ic
 export const launchApp = (target: string) => invoke<void>("launch_app", { target });
 export const toggleLauncher = () => invoke<void>("toggle_launcher");
 export const hideLauncher = () => invoke<void>("hide_launcher");
+
+// ---------- git ----------
+export type GitFile = { path: string; status: string; staged: boolean; unstaged: boolean };
+export type GitStatus = {
+  isRepo: boolean; root: string; branch: string; upstream: string | null;
+  ahead: number; behind: number; files: GitFile[]; fileMap: Record<string, string>;
+};
+export type GitBranch = { name: string; current: boolean; upstream: string | null; ahead: number; behind: number };
+export const gitStatus = (path: string) => invoke<GitStatus>("git_status", { path });
+export const gitDiff = (path: string, file: string, staged: boolean) => invoke<string>("git_diff", { path, file, staged });
+export const gitStage = (path: string, file: string, stage: boolean) => invoke<void>("git_stage", { path, file, stage });
+export const gitStageAll = (path: string, stage: boolean) => invoke<void>("git_stage_all", { path, stage });
+export const gitCommit = (path: string, message: string) => invoke<string>("git_commit", { path, message });
+export const gitSync = (path: string, action: "pull" | "push" | "fetch") => invoke<string>("git_sync", { path, action });
+export const gitBranches = (path: string) => invoke<GitBranch[]>("git_branches", { path });
+export const gitCheckout = (path: string, branch: string) => invoke<string>("git_checkout", { path, branch });
+export type GitCommit = { hash: string; parents: string[]; author: string; date: string; subject: string; refs: string[] };
+export const gitLog = (path: string, limit: number) => invoke<GitCommit[]>("git_log", { path, limit });
+export const gitShow = (path: string, hash: string) => invoke<string>("git_show", { path, hash });

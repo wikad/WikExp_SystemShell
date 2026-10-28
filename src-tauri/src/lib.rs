@@ -9,6 +9,7 @@ mod docker;
 mod monitor;
 mod shell;
 mod launcher;
+mod git;
 #[cfg(windows)]
 mod win;
 #[tauri::command]
@@ -113,7 +114,7 @@ pub fn run() {
         .manage(pty::PtyState::default())
         .manage(procs::ProcState::default())
         .manage(monitor::MonitorState::default())
-        .invoke_handler(tauri::generate_handler![greet,read_dir,parent_dir, read_text_file, write_text_file, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, procs::list_processes, procs::kill_processes, docker::docker_list, docker::docker_action, monitor::system_stats, shell::apply_shell_layout, shell::list_windows, shell::window_action, shell::show_main, shell::battery_status, shell::dock_window, shell::undock_window, shell::focus_main, shell::style_docked, shell::toggle_launcher, shell::hide_launcher, launcher::list_apps, launcher::app_icons, launcher::launch_app])
+        .invoke_handler(tauri::generate_handler![greet,read_dir,parent_dir, read_text_file, write_text_file, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, procs::list_processes, procs::kill_processes, docker::docker_list, docker::docker_action, monitor::system_stats, shell::apply_shell_layout, shell::list_windows, shell::window_action, shell::show_main, shell::battery_status, shell::dock_window, shell::undock_window, shell::focus_main, shell::style_docked, shell::toggle_launcher, shell::hide_launcher, launcher::list_apps, launcher::app_icons, launcher::launch_app, git::git_status, git::git_diff, git::git_stage, git::git_stage_all, git::git_commit, git::git_sync, git::git_branches, git::git_checkout, git::git_log, git::git_show])
         .setup(|app| {
             shell::setup(app.handle()); // pasek boczny + główne okno na pełny ekran
             Ok(())

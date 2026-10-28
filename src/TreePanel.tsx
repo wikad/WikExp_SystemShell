@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { homeDir } from "@tauri-apps/api/path";
 import { readDir, type FileEntry } from "./api";
 import { useSettings } from "./settings";
+import { useGit, gitStatusOf } from "./useGit";
 
 // "C:\Users\wikto" → ["C:\", "C:\Users", "C:\Users\wikto"]
 function ancestors(path: string): string[] {
@@ -35,6 +36,7 @@ export function TreePanel({ linkedCwd, active, onOpen, onOpenFile, openPaths }: 
 }) {
   const [ownCwd, setOwnCwd] = useState<string | null>(null);
   const cwd = linkedCwd ?? ownCwd;
+  const git = useGit(cwd);
   // lista razem z folderem, z którego pochodzi: stara lista nie miesza się z nową ścieżką
   const [listing, setListing] = useState<{ dir: string; files: FileEntry[] } | null>(null);
   const files = listing && listing.dir === cwd ? listing.files : [];
@@ -127,7 +129,7 @@ export function TreePanel({ linkedCwd, active, onOpen, onOpenFile, openPaths }: 
             onClick={() => { setSelected(i); open(r); }}
           >
             <span className="muted">{"  ".repeat(r.depth)}{icon}</span>
-            <span className={color}>{r.name}{r.kind === "dir" ? "\\" : ""}</span>
+            <span className={`${color} git-${gitStatusOf(git, r.path, r.kind !== "file")}`}>{r.name}{r.kind === "dir" ? "\\" : ""}</span>
           </div>
         );
       })}
