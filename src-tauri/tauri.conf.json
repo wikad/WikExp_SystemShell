@@ -12,11 +12,45 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "WikExp",
         "width": 1400,
         "height": 900,
         "decorations": false,
-        "maximized": true
+        "visible": false,
+        "resizable": false,
+        "maximizable": false,
+        "minimizable": false,
+        "skipTaskbar": true
+      },
+      {
+        "label": "bar",
+        "title": "WikExp pasek",
+        "width": 40,
+        "height": 800,
+        "decorations": false,
+        "resizable": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "visible": false,
+        "shadow": false,
+        "focus": false,
+        "maximizable": false,
+        "minimizable": false
+      },
+      {
+        "label": "launcher",
+        "title": "WikExp szukaj",
+        "width": 340,
+        "height": 376,
+        "decorations": false,
+        "resizable": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "visible": false,
+        "shadow": true,
+        "maximizable": false,
+        "minimizable": false
       }
     ],
     "security": {

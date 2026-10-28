@@ -1,0 +1,75 @@
+use portable_pty::{native_pty_system, Child, CommandBuilder, MasterPty, PtySize};
+use std::io::{Read, Write};
+use std::sync::Mutex;
+use std::thread;
+use tauri::{AppHandle, Emitter, State};
+
+/// Stan jednej sesji terminala. Żyje przez cały czas działania aplikacji
+/// (rejestrowany w lib.rs przez `.manage(PtyState::default())`).
+/// `Option` = sesji może jeszcze nie być; `Mutex` = komendy Tauri mogą biec równolegle.
+#[derive(Default)]
+pub struct PtyState {
+    writer: Mutex<Option<Box<dyn Write + Send>>>,
+    master: Mutex<Option<Box<dyn MasterPty + Send>>>,
+    child: Mutex<Option<Box<dyn Child + Send + Sync>>>,
+}
+
+#[tauri::command]
+pub fn pty_spawn(app: AppHandle, state: State<'_, PtyState>, cols: u16, rows: u16) -> Result<(), String> {
+    // Sesja już istnieje (np. ponowne zamontowanie komponentu) → nic nie rób.
+    if state.master.lock().unwrap().is_some() {
+        return Ok(());
+    }
+
+    // 1. Pseudo-terminal (ConPTY) od razu w rozmiarze panelu.
+    let pair = native_pty_system()
+        .openpty(PtySize { rows, cols, pixel_width: 0, pixel_height: 0 })
+        .map_err(|e| e.to_string())?;
+
+    // 2. PowerShell po stronie slave.
+    let cmd = CommandBuilder::new("powershell.exe");
+    let child = pair.slave.spawn_command(cmd).map_err(|e| e.to_string())?;
+
+    // 3. Reader (wyjście shella) i writer (wejście do shella).
+    let mut reader = pair.master.try_clone_reader().map_err(|e| e.to_string())?;
+    let writer = pair.master.take_writer().map_err(|e| e.to_string())?;
+
+    // 4. Wątek: czytaj w pętli i wysyłaj do frontu eventem.
+    thread::spawn(move || {
+        let mut buf = [0u8; 4096];
+        loop {
+            match reader.read(&mut buf) {
+                Ok(0) => break,
+                Ok(n) => {
+                    // to_vec(): event potrzebuje własnej kopii, bufor zaraz zostanie nadpisany
+                    let _ = app.emit("pty-output", buf[..n].to_vec());
+                }
+                Err(_) => break,
+            }
+        }
+        let _ = app.emit("pty-exit", ());
+    });
+
+    // 5. Master, writer i child do stanu: żyją, dopóki żyje aplikacja.
+    *state.writer.lock().unwrap() = Some(writer);
+    *state.master.lock().unwrap() = Some(pair.master);
+    *state.child.lock().unwrap() = Some(child);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn pty_write(state: State<'_, PtyState>, data: String) -> Result<(), String> {
+    let mut guard = state.writer.lock().unwrap();
+    let writer = guard.as_mut().ok_or("brak sesji terminala")?;
+    writer.write_all(data.as_bytes()).map_err(|e| e.to_string())?;
+    writer.flush().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn pty_resize(state: State<'_, PtyState>, cols: u16, rows: u16) -> Result<(), String> {
+    let guard = state.master.lock().unwrap();
+    let master = guard.as_ref().ok_or("brak sesji terminala")?;
+    master
+        .resize(PtySize { rows, cols, pixel_width: 0, pixel_height: 0 })
+        .map_err(|e| e.to_string())
+}

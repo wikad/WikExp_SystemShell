@@ -1,0 +1,44 @@
+import { useEffect, useRef } from "react";
+import { Terminal } from "@xterm/xterm";
+import { FitAddon } from "@xterm/addon-fit";
+import "@xterm/xterm/css/xterm.css";
+import { ptySpawn } from "./api";
+
+export function TerminalPanel() {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    // TODO 1: utwórz new Terminal({ ... }) z fontFamily, fontSize, theme
+    //         (theme: background, foreground, cursor: kolory z instrukcji)
+    const term = new Terminal({
+      fontFamily: '"JetBrains Mono", "Cascadia Mono", Consolas, monospace',
+      fontSize: 13,
+      cursorBlink: true,
+      theme: {
+        background: "#1e1e2e",   // --base, tło paneli
+        foreground: "#cdd6f4",   // --text
+        cursor: "#cba6f7",       // --accent
+        selectionBackground: "#45475a",
+      },
+    });
+    // TODO 2: utwórz FitAddon i term.loadAddon(...)
+    const fit = new FitAddon();
+    term.loadAddon(fit);
+    // TODO 3: term.open(el)
+    term.open(el);
+    // TODO 4: fit.fit()
+    fit.fit();
+    // TODO 5: term.write("hello")
+    ptySpawn().catch((e) => term.write(`\x1b[31m${String(e)}\x1b[0m`));
+    return () => {
+      // TODO 6: term.dispose()
+      term.dispose();
+
+      };
+  }, []);
+
+  return <div ref={containerRef} className="term-container" />;
+}

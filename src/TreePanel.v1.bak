@@ -1,0 +1,131 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+import { readDir } from "./api";
+
+type Node = { name: string; path: string };
+
+// "C:\Users\wikto" → ["C:\", "C:\Users", "C:\Users\wikto"]
+function ancestors(path: string): string[] {
+  const parts = path.split("\\").filter(Boolean);
+  if (parts.length === 0) return [];
+  const out = [parts[0] + "\\"];
+  let acc = out[0];
+  for (const p of parts.slice(1)) {
+    acc = acc.endsWith("\\") ? acc + p : acc + "\\" + p;
+    out.push(acc);
+  }
+  return out;
+}
+
+const parentOf = (path: string) => {
+  const a = ancestors(path);
+  return a.length > 1 ? a[a.length - 2] : null;
+};
+
+export function TreePanel({ cwd, active, onOpen }: {
+  cwd: string | null;
+  active: boolean;
+  onOpen: (path: string) => void;
+}) {
+  // podfoldery każdego wczytanego folderu (cache), undefined = jeszcze nie wczytany
+  const [children, setChildren] = useState<Record<string, Node[]>>({});
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [selected, setSelected] = useState<string | null>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+
+  const root = cwd ? ancestors(cwd)[0] : null;
+
+  // zmiana cwd (np. z panelu plików) → rozwiń całą ścieżkę i zaznacz cwd
+  useEffect(() => {
+    if (!cwd) return;
+    setExpanded((prev) => new Set([...prev, ...ancestors(cwd)]));
+    setSelected(cwd);
+  }, [cwd]);
+
+  // dociągnij podfoldery dla rozwiniętych węzłów, których nie ma w cache
+  useEffect(() => {
+    for (const path of expanded) {
+      if (children[path]) continue;
+      readDir(path)
+        .then((entries) => entries
+          .filter((e) => e.isDir && !e.name.startsWith("$"))
+          .map((e) => ({ name: e.name, path: e.path })))
+        .catch(() => [] as Node[])                // brak uprawnień itp. → pusty
+        .then((nodes) => setChildren((c) => ({ ...c, [path]: nodes })));
+    }
+  }, [expanded, children]);
+
+  // spłaszczona lista widocznych wierszy (kolejność jak na ekranie)
+  const rows = useMemo(() => {
+    const out: { node: Node; depth: number }[] = [];
+    const walk = (node: Node, depth: number) => {
+      out.push({ node, depth });
+      if (!expanded.has(node.path)) return;
+      for (const ch of children[node.path] ?? []) walk(ch, depth + 1);
+    };
+    if (root) walk({ name: root, path: root }, 0);
+    return out;
+  }, [root, expanded, children]);
+
+  const toggle = (path: string, open?: boolean) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      const shouldOpen = open ?? !next.has(path);
+      if (shouldOpen) next.add(path); else next.delete(path);
+      return next;
+    });
+
+  // klawisze, tylko gdy panel aktywny
+  useEffect(() => {
+    if (!active) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.altKey || e.ctrlKey) return;
+      const i = rows.findIndex((r) => r.node.path === selected);
+      if (e.key === "j" || e.key === "ArrowDown") {
+        e.preventDefault();
+        const r = rows[Math.min(i + 1, rows.length - 1)];
+        if (r) setSelected(r.node.path);
+      } else if (e.key === "k" || e.key === "ArrowUp") {
+        e.preventDefault();
+        const r = rows[Math.max(i - 1, 0)];
+        if (r) setSelected(r.node.path);
+      } else if ((e.key === "l" || e.key === "Enter" || e.key === "ArrowRight") && selected) {
+        e.preventDefault();
+        toggle(selected, true);
+        onOpen(selected);
+      } else if ((e.key === "h" || e.key === "ArrowLeft") && selected) {
+        e.preventDefault();
+        if (expanded.has(selected) && selected !== root) toggle(selected, false);
+        else { const p = parentOf(selected); if (p) setSelected(p); }
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [active, rows, selected, expanded, root, onOpen]);
+
+  // przewiń do zaznaczonego wiersza
+  useEffect(() => {
+    listRef.current
+      ?.querySelector(".row.sel")
+      ?.scrollIntoView({ block: "nearest" });
+  }, [selected, active]);
+
+  return (
+    <div ref={listRef}>
+      {rows.map(({ node, depth }) => {
+        const isOpen = expanded.has(node.path);
+        const loaded = children[node.path];
+        const leaf = loaded !== undefined && loaded.length === 0;
+        return (
+          <div
+            key={node.path}
+            className={`row ${node.path === selected && active ? "sel" : ""}`}
+            onClick={() => { setSelected(node.path); toggle(node.path); onOpen(node.path); }}
+          >
+            <span className="muted">{"  ".repeat(depth)}{leaf ? "  " : isOpen ? "▾ " : "▸ "}</span>
+            <span className={node.path === cwd ? "accent" : ""}>{node.name}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
