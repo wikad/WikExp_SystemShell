@@ -397,3 +397,38 @@ body.is-launcher { background: var(--mantle); }
 .gh-subject { flex: 1; min-width: 0; }
 .gh-meta { flex: none; font-size: 0.88em; }
 .gh-details { flex: none; max-height: 40%; overflow: auto; margin: 0; padding: 6px 8px; border-top: 1px solid var(--overlay); font: inherit; font-size: 0.9em; white-space: pre-wrap; user-select: text; color: var(--text); }
+
+/* ---------- szukanie w projekcie (Ctrl+Shift+F) ---------- */
+.sr { height: 100%; display: flex; flex-direction: column; min-height: 0; }
+.sr-head { display: flex; gap: 4px; padding: 2px 4px 4px; }
+.sr-input { flex: 1; min-width: 0; font: inherit; background: var(--base); border: 1px solid var(--overlay); border-radius: 6px; color: var(--text); padding: 3px 8px; outline: none; user-select: text; }
+.sr-input:focus { border-color: var(--accent); }
+.sr-opt { font: inherit; font-size: 0.85em; min-width: 28px; border-radius: 6px; border: 1px solid var(--overlay); background: transparent; color: var(--muted); cursor: pointer; }
+.sr-opt:hover { color: var(--text); }
+.sr-opt.on { background: var(--surface); color: var(--accent); border-color: var(--accent); }
+.sr-info { display: flex; gap: 6px; padding: 0 6px 4px; font-size: 0.88em; border-bottom: 1px solid var(--overlay); }
+.sr-info .spacer { flex: 1; }
+.sr-list { flex: 1; min-height: 0; overflow: auto; padding-top: 2px; }
+.sr-file { cursor: pointer; align-items: center; gap: 2px; margin-top: 2px; }
+.sr-file:hover { background: color-mix(in srgb, var(--surface) 55%, transparent); }
+.sr-file .spacer { flex: 1; }
+.sr-dir { font-size: 0.88em; min-width: 0; }
+.sr-count { flex: none; font-size: 0.8em; padding: 0 6px; border-radius: 999px; background: var(--surface); color: var(--muted); }
+.sr-hit { cursor: pointer; gap: 8px; padding-left: 18px; }
+.sr-hit:hover { background: color-mix(in srgb, var(--surface) 55%, transparent); }
+.sr-hit.sel { background: var(--surface); box-shadow: inset 3px 0 0 var(--accent); }
+.sr-ln { flex: none; min-width: 4ch; text-align: right; }
+.sr-mark { background: color-mix(in srgb, var(--yellow) 30%, transparent); color: var(--text); border-radius: 2px; }
+
+/* Ctrl+F w edytorze: panel szukania CodeMirror w kolorach motywu */
+.editor-host .cm-panels-top { border-bottom: 1px solid var(--overlay); }
+.editor-host .cm-search { font: inherit; font-size: 0.92em; padding: 4px 8px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+.editor-host .cm-search br { flex-basis: 100%; content: ""; }
+.editor-host .cm-textfield { font: inherit; background: var(--base); border: 1px solid var(--overlay); border-radius: 6px; color: var(--text); padding: 2px 8px; outline: none; margin: 0; }
+.editor-host .cm-textfield:focus { border-color: var(--accent); }
+.editor-host .cm-button { font: inherit; background: var(--mantle); background-image: none; border: 1px solid var(--overlay); border-radius: 6px; color: var(--text); padding: 1px 8px; margin: 0; cursor: pointer; }
+.editor-host .cm-button:hover { border-color: var(--accent); color: var(--accent); }
+.editor-host .cm-search label { display: inline-flex; align-items: center; gap: 3px; color: var(--muted); }
+.editor-host .cm-search input[type="checkbox"] { accent-color: var(--accent); margin: 0; }
+.editor-host .cm-search button[name="close"] { background: transparent; border: 0; color: var(--muted); font-size: 1.2em; cursor: pointer; margin-left: auto; }
+.editor-host .cm-searchMatch-selected { background-color: color-mix(in srgb, var(--accent) 40%, transparent); }

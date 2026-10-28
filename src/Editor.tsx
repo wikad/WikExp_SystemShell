@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { EditorView, basicSetup } from "codemirror";
 import { Compartment, EditorState, Prec } from "@codemirror/state";
 import { keymap } from "@codemirror/view";
+import { search } from "@codemirror/search";
 import { indentWithTab } from "@codemirror/commands";
 import { HighlightStyle, LanguageDescription, syntaxHighlighting } from "@codemirror/language";
 import { languages } from "@codemirror/language-data";
@@ -46,10 +47,26 @@ function buildTheme(p: Palette, font: string, fontSize: number) {
  * Edytor jednego pliku. Ctrl+S zapisuje, Ctrl+W zamyka.
  * Zachowuje końce linii pliku (CRLF z Windowsa zostają CRLF).
  */
-export function Editor({ path, initialContent, active, onDirty, onSave, onClose }: {
+// Ctrl+F: wbudowane szukanie CodeMirror, przetłumaczone na polski
+const PHRASES = {
+  "Find": "Szukaj", "Replace": "Zamień na", "next": "następny", "previous": "poprzedni", "all": "wszystkie",
+  "match case": "wielkość liter", "by word": "całe słowa", "regexp": "regex", "replace": "zamień",
+  "replace all": "zamień wszystkie", "close": "zamknij", "Go to line": "Idź do linii", "go": "idź",
+  "current match": "bieżące", "on line": "w linii", "replaced match on line $": "zamieniono w linii $",
+  "replaced $ matches": "zamieniono $", "Folded lines": "Zwinięte linie", "Unfolded lines": "Rozwinięte linie",
+};
+
+export type Jump = { line: number; col: number; len: number; n: number };
+
+/**
+ * Ctrl+F szuka w pliku (wbudowane w CodeMirror, z polem zamiany), Ctrl+Alt+G idzie do linii.
+ * - jump: przejdź do linii i zaznacz trafienie (z wyszukiwania w projekcie); `n` rośnie przy każdym żądaniu
+ */
+export function Editor({ path, initialContent, active, jump, onDirty, onSave, onClose }: {
   path: string;
   initialContent: string;
   active: boolean;
+  jump?: Jump | null;
   onDirty: (dirty: boolean) => void;
   onSave: (content: string) => Promise<void>;
   onClose: () => void;
@@ -89,6 +106,8 @@ export function Editor({ path, initialContent, active, onDirty, onSave, onClose 
         extensions: [
           basicSetup,
           EditorState.lineSeparator.of(lineSep),
+          EditorState.phrases.of(PHRASES),
+          search({ top: true }),
           keymap.of([indentWithTab]),
           Prec.highest(keymap.of([
             { key: "Mod-s", run: save, preventDefault: true },
@@ -122,6 +141,18 @@ export function Editor({ path, initialContent, active, onDirty, onSave, onClose 
   useEffect(() => {
     if (active) viewRef.current?.focus();
   }, [active, path]);
+
+  // skok do trafienia: zaznacz je i przewiń tak, żeby linia była na środku
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view || !jump) return;
+    const doc = view.state.doc;
+    const line = doc.line(Math.min(Math.max(jump.line, 1), doc.lines));
+    const from = Math.min(line.from + jump.col, line.to);
+    const to = Math.min(from + jump.len, line.to);
+    view.dispatch({ selection: { anchor: from, head: to }, effects: EditorView.scrollIntoView(from, { y: "center" }) });
+    if (active) view.focus();
+  }, [jump?.n, path]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return <div ref={hostRef} className="editor-host" />;
 }

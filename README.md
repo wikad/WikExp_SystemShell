@@ -1,11 +1,31 @@
-# SYSTEM SHELL 
-my own take on system shell that would be the best for programing and using staff corelated with it as docker cubernetes and other
+# WikExp: System Shell
 
-# Stage 
-* mockup look and style DONE
-* TODO : read_dir(path)
+WikExp to mój własny pulpit dla Windows, zbudowany pod programowanie. Działa w stylu terminala (TUI) i docelowo ma zastąpić `explorer.exe`. Pliki, edytor, terminal, git, procesy, Docker i monitor systemu są panelami na jednej siatce, którą układasz po swojemu i obsługujesz głównie klawiaturą (skróty w stylu vima). Backend jest w Ruście (Tauri 2), interfejs w React + TypeScript.
 
+![WikExp](docs/screenshot.png)
 
+## Funkcje
+
+- **Układ paneli** na siatce 24×16: przeciąganie, zmiana rozmiaru, dzielenie, wiele instancji tego samego panelu; układ zapisuje się sam. Przełączanie paneli: `Alt+h/j/k/l`.
+- **Pliki i drzewo**: nawigacja `h/j/k/l`, historia `H/L`, ukryte pliki (atrybuty Windows), podświetlanie otwartych plików.
+- **Edytor** (CodeMirror 6): kolorowanie składni, `Ctrl+S` / `Ctrl+W`, zachowanie końców linii CRLF, `Ctrl+F` szukaj i zamień w pliku.
+- **Szukanie w projekcie** (`Ctrl+Shift+F`): całe repozytorium z pominięciem `.gitignore`, regex, całe słowa, wielkość liter; klik w wynik otwiera plik na tej linii.
+- **Git**: status, diff, stage, commit, pull/push/fetch, przełączanie branchy, historia z grafem; kolory zmienionych plików w drzewie i liście.
+- **Terminal** (xterm.js + ConPTY): osobny shell w każdym panelu.
+- **Procesy i Docker**: lista procesów z zabijaniem, kontenery (start/stop/restart/usuń).
+- **Monitor** w stylu btop: CPU, RAM, GPU, sieć, dyski.
+- **Pasek boczny** zamiast paska zadań: otwarte programy z ikonami, zegar, launcher; programy można wkładać w panele WikExp.
+- **Ustawienia**: 8 motywów (Catppuccin, Tokyo Night, Gruvbox, Nord, Dracula…), font, odstępy, shell terminala.
+
+## Stan prac
+
+- [x] Panele, układ i nawigacja klawiaturą
+- [x] `read_dir`, drzewo, edytor plików
+- [x] Terminal, procesy, Docker, monitor
+- [x] Pasek boczny, okno na pełny ekran, ukrywanie paska zadań Windows
+- [x] Git i szukanie w projekcie
+- [ ] Warstwa pulpitu, operacje na plikach (kopiuj/wklej/kosz), zasobnik systemowy, autostart
+- [ ] Pełna podmiana `explorer.exe` (wpis `Shell` w rejestrze), testy w VM
 
 ## Jak odpalić projekt
 
@@ -51,8 +71,8 @@ npm --version
 ### Pobranie i uruchomienie
 
 ```powershell
-git clone <adres-repo> C:\dev\WikExp
-cd C:\dev\WikExp
+git clone https://github.com/wikad/WikExp_SystemShell.git C:\devWikExp\WikExp
+cd C:\devWikExp\WikExp
 npm install
 npm run tauri dev
 ```

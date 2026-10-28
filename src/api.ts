@@ -91,3 +91,10 @@ export const gitCheckout = (path: string, branch: string) => invoke<string>("git
 export type GitCommit = { hash: string; parents: string[]; author: string; date: string; subject: string; refs: string[] };
 export const gitLog = (path: string, limit: number) => invoke<GitCommit[]>("git_log", { path, limit });
 export const gitShow = (path: string, hash: string) => invoke<string>("git_show", { path, hash });
+
+// ---------- szukanie w projekcie ----------
+export type SearchHit = { line: number; col: number; len: number; text: string; hl: number };
+export type SearchFile = { path: string; rel: string; hits: SearchHit[] };
+export type SearchResult = { files: SearchFile[]; total: number; scanned: number; truncated: boolean; cancelled: boolean };
+export const searchFiles = (root: string, query: string, caseSensitive: boolean, wholeWord: boolean, regex: boolean) =>
+  invoke<SearchResult>("search_files", { root, query, caseSensitive, wholeWord, regex });

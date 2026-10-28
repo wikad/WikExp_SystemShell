@@ -1,12 +1,13 @@
 // Logika układu paneli: siatka COLS×ROWS, każdy panel to prostokąt w komórkach.
 // Czyste funkcje bez Reacta, żeby łatwo je testować.
 
-export type PanelKind = "tree" | "files" | "terminal" | "side" | "docker" | "monitor" | "settings" | "app" | "git";
+export type PanelKind = "tree" | "files" | "terminal" | "side" | "docker" | "monitor" | "settings" | "app" | "git" | "search";
 // id = konkretna instancja ("terminal", "terminal-2"), kind = rodzaj panelu
 export type PanelId = string;
 export type Rect = {
   id: PanelId; kind: PanelKind; x: number; y: number; w: number; h: number;
   minW?: number; minH?: number; // własny minimalny rozmiar (np. program w panelu, który nie da się zmniejszyć)
+  from?: PanelId; // panel, który oddał połowę miejsca na ten (splitPanel); przy zamknięciu dostaje je z powrotem
 };
 
 
@@ -18,7 +19,7 @@ export const MIN_W = 3;
 export const MIN_H = 2;
 
 export const PANEL_NAMES: Record<PanelKind, string> = {
-  tree: "drzewo", files: "pliki", terminal: "terminal", side: "procesy", docker: "docker", monitor: "monitor", settings: "ustawienia", app: "okno programu", git: "git",
+  tree: "drzewo", files: "pliki", terminal: "terminal", side: "procesy", docker: "docker", monitor: "monitor", settings: "ustawienia", app: "okno programu", git: "git", search: "szukaj",
 };
 export const ALL_KINDS = Object.keys(PANEL_NAMES) as PanelKind[];
 
@@ -209,6 +210,25 @@ export function splitPanel(layout: Rect[], id: PanelId): { layout: Rect[]; rect:
     return { layout: layout.map((x) => (x.id === id ? { ...x, h: top, minH: undefined } : x)), rect: { x: r.x, y: r.y + top, w: r.w, h: r.h - top } };
   }
   return null;
+}
+
+/**
+ * Zamyka panel. Jeśli powstał przez podzielenie innego panelu (`from`) i ten dalej przylega
+ * do niego całą krawędzią, oddaje mu miejsce: tamten panel wraca do rozmiaru sprzed podziału.
+ */
+export function removePanel(layout: Rect[], id: PanelId): Rect[] {
+  const gone = layout.find((r) => r.id === id);
+  const rest = layout.filter((r) => r.id !== id);
+  const src = gone?.from ? rest.find((r) => r.id === gone.from) : undefined;
+  if (!gone || !src) return rest;
+  let merged: Rect | null = null;
+  if (src.y === gone.y && src.h === gone.h && (src.x + src.w === gone.x || gone.x + gone.w === src.x))
+    merged = { ...src, x: Math.min(src.x, gone.x), w: src.w + gone.w };          // obok siebie w poziomie
+  else if (src.x === gone.x && src.w === gone.w && (src.y + src.h === gone.y || gone.y + gone.h === src.y))
+    merged = { ...src, y: Math.min(src.y, gone.y), h: src.h + gone.h };          // jeden nad drugim
+  if (!merged) return rest; // panele rozsunięte albo zmienione: miejsce zostaje wolne
+  const out = rest.map((r) => (r.id === src.id ? merged! : r));
+  return isValid(out) ? out : rest;
 }
 
 const STORAGE_KEY = "wikexp.layout.v2";

@@ -12,9 +12,10 @@ import { MonitorPanel } from "./MonitorPanel";
 import { SettingsPanel } from "./SettingsPanel";
 import { AppPanel, type Docked } from "./AppPanel";
 import { GitPanel } from "./GitPanel";
+import { SearchPanel } from "./SearchPanel";
 import { listen } from "@tauri-apps/api/event";
 import { Workspace, type PanelView } from "./Workspace";
-import { loadLayout, saveLayout, growTo, largestFreeAnywhere, newId, splitPanel, DEFAULT_LAYOUT, PANEL_NAMES, type PanelId, type PanelKind, type Rect } from "./layout";
+import { loadLayout, saveLayout, growTo, largestFreeAnywhere, newId, removePanel, splitPanel, DEFAULT_LAYOUT, PANEL_NAMES, type PanelId, type PanelKind, type Rect } from "./layout";
 
 type Dir = "h" | "j" | "k" | "l";
 const DIR_BY_CODE: Record<string, Dir> = { KeyH: "h", KeyJ: "j", KeyK: "k", KeyL: "l" };
@@ -78,7 +79,7 @@ function findNeighbor(from: PanelId, dir: Dir, recent: PanelId[]): PanelId | nul
 
 const MODE: Record<PanelKind | "editor", string> = {
     editor: "EDYCJA",
-    tree: "NORMAL", files: "NORMAL", terminal: "TERMINAL", side: "PROCESY", docker: "DOCKER", monitor: "MONITOR", settings: "USTAWIENIA", app: "PROGRAM", git: "GIT",
+    tree: "NORMAL", files: "NORMAL", terminal: "TERMINAL", side: "PROCESY", docker: "DOCKER", monitor: "MONITOR", settings: "USTAWIENIA", app: "PROGRAM", git: "GIT", search: "SZUKAJ",
   };
 
 // ostatnie foldery paneli plików, żeby po restarcie każdy wrócił tam, gdzie był
@@ -126,7 +127,8 @@ export default function App() {
   const linkedFiles = lastFiles && filesIds.includes(lastFiles) ? lastFiles : filesIds[0] ?? null;
 
   // żądania z drzewa do panelu plików: wejdź do folderu / otwórz plik w edytorze
-  const [goTo, setGoTo] = useState<Record<string, { path: string; n: number; file?: boolean }>>({});
+  type GoTo = { path: string; n: number; file?: boolean; line?: number; col?: number; len?: number };
+  const [goTo, setGoTo] = useState<Record<string, GoTo>>({});
   const request = useCallback((path: string, file: boolean) => {
     if (!linkedFiles) return;
     setGoTo((g) => ({ ...g, [linkedFiles]: { path, file, n: (g[linkedFiles]?.n ?? 0) + 1 } }));
@@ -167,17 +169,56 @@ export default function App() {
     const id = newId(l, "app");
     let base = l;
     let rect = largestFreeAnywhere(l);
+    let from: PanelId | undefined;
     if (!rect) {
       const target = l.find((r) => r.id === activeRef.current) ?? [...l].sort((a, b) => b.w * b.h - a.w * a.h)[0];
       const split = target && splitPanel(l, target.id);
       if (!split) return;
       base = split.layout;
       rect = split.rect;
+      from = target.id;
     }
     setPresets((p) => ({ ...p, [id]: w }));
-    setLayout([...base, { id, kind: "app", ...rect }]);
+    setLayout([...base, { id, kind: "app", ...rect, from }]);
     setActive(id);
   }, []);
+
+  // nowy panel danego rodzaju: w największym wolnym miejscu, a gdy go brak, aktywny panel dzieli się na pół
+  const addPanel = useCallback((kind: PanelKind): PanelId | null => {
+    const l = layoutRef.current;
+    const id = newId(l, kind);
+    let base = l;
+    let rect = largestFreeAnywhere(l);
+    let from: PanelId | undefined;
+    if (!rect) {
+      const target = l.find((r) => r.id === activeRef.current) ?? [...l].sort((a, b) => b.w * b.h - a.w * a.h)[0];
+      const split = target && splitPanel(l, target.id);
+      if (!split) return null;
+      base = split.layout;
+      rect = split.rect;
+      from = target.id; // przy zamknięciu ten panel odzyska miejsce
+    }
+    const next = [...base, { id, kind, ...rect, from }];
+    layoutRef.current = next; // dwa wywołania pod rząd widzą już nowy panel
+    setLayout(next);
+    return id;
+  }, []);
+
+  // wynik wyszukiwania → plik w panelu plików na tej linii (gdy nie ma panelu plików, powstaje nowy)
+  const [searchFocus, setSearchFocus] = useState<{ n: number; text?: string } | null>(null);
+  const openAt = useCallback((path: string, line: number, col: number, len: number) => {
+    let id: PanelId | null = linkedFiles;
+    if (!id) {
+      id = addPanel("files");
+      if (!id) return;
+      const newFiles = id;
+      setCwds((c) => ({ ...c, [newFiles]: path.slice(0, path.lastIndexOf("\\")) }));
+    }
+    const target = id;
+    setGoTo((g) => ({ ...g, [target]: { path, file: true, line, col, len, n: (g[target]?.n ?? 0) + 1 } }));
+    setActive(target);
+  }, [linkedFiles, addPanel]);
+
   useEffect(() => {
     const un = listen<WinInfo>("dock-request", (e) => dockFromBar(e.payload));
     return () => { un.then((f) => f()); };
@@ -225,15 +266,39 @@ export default function App() {
         getCurrentWindow().close();
         return;
       }
+      // Ctrl+Shift+F: przełącznik panelu „szukaj”. Nie ma go → otwiera nowy
+      // (zaznaczony tekst, np. w edytorze, od razu trafia do pola); jest → zamyka go
+      if (e.ctrlKey && e.shiftKey && !e.altKey && e.code === "KeyF") {
+        e.preventDefault();
+        e.stopPropagation();
+        const l = layoutRef.current;
+        const open = l.filter((r) => r.kind === "search").map((r) => r.id);
+        if (open.length) {
+          setLayout(open.reduce(removePanel, l)); // panel, z którego wziął miejsce, wraca do dawnego rozmiaru; fokus wraca sam
+          return;
+        }
+        const picked = window.getSelection()?.toString().trim() ?? "";
+        const text = picked && !picked.includes("\n") && picked.length <= 200 ? picked : undefined;
+        const id = addPanel("search");
+        if (id) {
+          setActive(id);
+          setSearchFocus((f) => ({ n: (f?.n ?? 0) + 1, text }));
+        }
+        return;
+      }
+
       // e.code = fizyczny klawisz: działa z CapsLockiem i Shiftem.
       // !ctrlKey: AltGr (Ctrl+Alt) zostaje do pisania polskich znaków.
       // Delete zamyka aktywny panel (też terminal, razem z jego shellem).
       // Wyjątek: otwarty edytor pliku, tam Delete kasuje znak.
-      const typing = activeKind === "files" && !!openFiles[active];
+      // To samo w polach tekstowych (szukaj, wiadomość commita); terminal (xterm) się nie liczy.
+      const el = e.target as HTMLElement | null;
+      const inField = !!el && (el.tagName === "INPUT" || (el.tagName === "TEXTAREA" && !el.classList.contains("xterm-helper-textarea")));
+      const typing = inField || (activeKind === "files" && !!openFiles[active]);
       if (e.key === "Delete" && !e.ctrlKey && !e.altKey && !e.shiftKey && !e.metaKey && !typing) {
         e.preventDefault();
         e.stopPropagation();
-        setLayout((l) => l.filter((r) => r.id !== active));
+        setLayout((l) => removePanel(l, active));
         return;
       }
 
@@ -247,7 +312,7 @@ export default function App() {
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [active, activeKind, openFiles]);
+  }, [active, activeKind, openFiles, addPanel]);
 
   // globalne Alt+H/J/K/L z Rusta: działają też, gdy fokus jest w zadokowanym programie
   useEffect(() => {
@@ -295,6 +360,18 @@ export default function App() {
           title: instanceTitle(r),
           body: <GitPanel cwd={linkedFiles ? cwds[linkedFiles] ?? null : null} active={isActive} />,
         };
+      case "search":
+        return {
+          title: instanceTitle(r),
+          body: (
+            <SearchPanel
+              cwd={linkedFiles ? cwds[linkedFiles] ?? null : null}
+              active={isActive}
+              focus={searchFocus}
+              onOpen={openAt}
+            />
+          ),
+        };
       case "terminal":
         return { title: instanceTitle(r), body: <TerminalPanel sessionId={r.id} active={isActive} /> };
       case "side":
@@ -309,11 +386,11 @@ export default function App() {
           menu: docked[r.id] ? [
             { text: "Minimalizuj program", action: () => { windowAction(docked[r.id]!.hwnd, "minimize"); } },
             { text: zoomed === r.id ? "Przywróć do siatki" : "Powiększ na całą przestrzeń", action: () => setZoomed((z) => (z === r.id ? null : r.id)) },
-            { text: "Wyjmij okno z panelu", action: () => setLayout((l) => l.filter((x) => x.id !== r.id)) },
+            { text: "Wyjmij okno z panelu", action: () => setLayout((l) => removePanel(l, r.id)) },
             "separator",
             { text: "Zamknij program", action: () => {
               const hwnd = docked[r.id]!.hwnd;
-              setLayout((l) => l.filter((x) => x.id !== r.id));   // panel znika, okno wraca do normalności…
+              setLayout((l) => removePanel(l, r.id));   // panel znika, okno wraca do normalności…
               setTimeout(() => windowAction(hwnd, "close").catch(() => {}), 150); // …i dostaje polecenie zamknięcia
             } },
           ] : undefined,
@@ -323,7 +400,7 @@ export default function App() {
               active={isActive}
               preset={presets[r.id] ?? null}
               onDocked={(d) => reportDocked(r.id, d)}
-              onClose={() => setLayout((l) => l.filter((x) => x.id !== r.id))}
+              onClose={() => setLayout((l) => removePanel(l, r.id))}
               onNeedSize={(nw, nh, cw, ch) => fitPanel(r.id, nw, nh, cw, ch)}
             />
           ),
@@ -343,7 +420,7 @@ export default function App() {
         <span className="mode">{activeKind === "files" && openFiles[active] ? MODE.editor : MODE[activeKind]}</span>
         <span>{linkedFiles && cwds[linkedFiles] ? cwds[linkedFiles] : "WikExp"}</span>
         <span className="spacer" />
-        <span>{activeKind === "files" && openFiles[active] ? "ctrl+s zapisz · ctrl+w zamknij · " : activeKind === "files" ? "enter otwórz · " : activeKind === "side" ? "s sort · xx kill · " : activeKind === "docker" ? "s start/stop · r restart · xx rm · " : ""}{activeKind === "files" && openFiles[active] ? "" : "del zamknij panel · "}przeciągnij tytuł · shift+krawędź = przerwa · ctrl+q quit · alt+hjkl panel</span>
+        <span>{activeKind === "files" && openFiles[active] ? "ctrl+f szukaj · ctrl+s zapisz · ctrl+w zamknij · " : activeKind === "files" ? "enter otwórz · " : activeKind === "search" ? "↑↓ wybierz · enter otwórz · " : activeKind === "side" ? "s sort · xx kill · " : activeKind === "docker" ? "s start/stop · r restart · xx rm · " : ""}{activeKind === "files" && openFiles[active] ? "" : "del zamknij panel · "}ctrl+shift+f szukaj w projekcie · przeciągnij tytuł · shift+krawędź = przerwa · ctrl+q quit · alt+hjkl panel</span>
       </footer>
     </div>
   );

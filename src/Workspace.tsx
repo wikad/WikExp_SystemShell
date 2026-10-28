@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Menu } from "@tauri-apps/api/menu";
 import {
   ALL_KINDS, COLS, PANEL_NAMES, ROWS,
-  largestFreeRect, moveTo, newId, resizeEdge,
+  largestFreeRect, moveTo, newId, removePanel, resizeEdge,
   type Edge, type PanelId, type PanelKind, type Rect,
 } from "./layout";
 import { useSettings } from "./settings";
@@ -144,7 +144,7 @@ export function Workspace({ layout, onLayout, active, onActivate, render, zoomed
     popup([
       ...extra,
       ...(extra.length ? ["separator" as const] : []),
-      { text: "Zamknij panel", action: () => onLayout(live.current.layout.filter((x) => x.id !== r.id)) },
+      { text: "Zamknij panel", action: () => onLayout(removePanel(live.current.layout, r.id)) },
     ]);
   };
 

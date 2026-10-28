@@ -1,8 +1,8 @@
 [package]
 name = "wikexp"
 version = "0.1.0"
-description = "A Tauri App"
-authors = ["you"]
+description = "WikExp: własny pulpit dla Windows w stylu terminala, zamiennik explorer.exe dla programisty (pliki, edytor, terminal, git, Docker, procesy, monitor)"
+authors = ["Wiktor Adamczyk"]
 edition = "2024"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -24,6 +24,9 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 portable-pty = "0.9.0"
 sysinfo = "0.35"
+# szukanie w projekcie (Ctrl+Shift+F): przechodzenie po plikach z .gitignore + regex
+ignore = "0.4"
+regex = "1"
 
 # tylko Windows: wywołania WinAPI dla paska bocznego (AppBar, lista okien, ikony)
 [target.'cfg(windows)'.dependencies]

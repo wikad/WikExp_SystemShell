@@ -1,7 +1,7 @@
 import { useEffect, useReducer, useState } from "react";
 import { homeDir } from "@tauri-apps/api/path";
 import { formatSize, parentDir, readDir, readTextFile, writeTextFile, type FileEntry } from "./api";
-import { Editor } from "./Editor";
+import { Editor, type Jump } from "./Editor";
 import { useSettings } from "./settings";
 import { useGit, gitStatusOf } from "./useGit";
 
@@ -34,15 +34,15 @@ function navReducer(s: Nav, a: NavAction): Nav {
 /**
  * Samodzielny panel plików: każda instancja ma własny folder, historię i zaznaczenie.
  * - initialPath: folder startowy (null = folder domowy)
- * - goTo: żądanie z zewnątrz (np. z drzewa): wejdź do folderu albo otwórz plik;
- *   `n` rośnie przy każdym żądaniu
+ * - goTo: żądanie z zewnątrz (np. z drzewa albo wyszukiwania): wejdź do folderu albo otwórz plik,
+ *   opcjonalnie na konkretnej linii; `n` rośnie przy każdym żądaniu
  * - onCwd: zgłasza zmianę folderu do App (tytuł panelu, drzewo, zapis)
  * - onOpenFile: zgłasza otwarty plik (podświetlenie w drzewie, tytuł) albo null
  */
 export function FilesPanel({ active, initialPath, goTo, onCwd, onOpenFile }: {
   active: boolean;
   initialPath: string | null;
-  goTo: { path: string; n: number; file?: boolean } | null;
+  goTo: { path: string; n: number; file?: boolean; line?: number; col?: number; len?: number } | null;
   onCwd: (cwd: string) => void;
   onOpenFile: (f: OpenFile | null) => void;
 }) {
@@ -60,6 +60,7 @@ export function FilesPanel({ active, initialPath, goTo, onCwd, onOpenFile }: {
   const [dirty, setDirty] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [closeArmed, setCloseArmed] = useState(false);
+  const [jump, setJump] = useState<Jump | null>(null); // linia, na którą skoczyć w edytorze
 
   useEffect(() => {
     onOpenFile(editor ? { path: editor.path, dirty } : null);
@@ -71,14 +72,15 @@ export function FilesPanel({ active, initialPath, goTo, onCwd, onOpenFile }: {
     return () => clearTimeout(id);
   }, [closeArmed]);
 
-  const openFile = (path: string) => {
-    if (editor?.path === path) return;
+  const openFile = (path: string, at?: { line: number; col: number; len: number }) => {
+    const pos = at ? { ...at, n: (jump?.n ?? 0) + 1 } : null;
+    if (editor?.path === path) { if (pos) setJump(pos); return; }
     if (editor && dirty) {
       setNotice("niezapisane zmiany: ctrl+s zapisz albo ctrl+w ×2 zamknij bez zapisu");
       return;
     }
     readTextFile(path)
-      .then((content) => { setEditor({ path, content }); setDirty(false); setNotice(null); })
+      .then((content) => { setEditor({ path, content }); setJump(pos); setDirty(false); setNotice(null); })
       .catch((e) => setNotice(String(e)));
   };
 
@@ -105,7 +107,7 @@ export function FilesPanel({ active, initialPath, goTo, onCwd, onOpenFile }: {
 
   useEffect(() => {
     if (!goTo) return;
-    if (goTo.file) openFile(goTo.path);
+    if (goTo.file) openFile(goTo.path, goTo.line ? { line: goTo.line, col: goTo.col ?? 0, len: goTo.len ?? 0 } : undefined);
     else dispatch({ type: "go", path: goTo.path });
   }, [goTo?.n]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -155,7 +157,7 @@ export function FilesPanel({ active, initialPath, goTo, onCwd, onOpenFile }: {
           <span className="accent">{name}</span>
           {dirty && <span className="yellow"> ●</span>}
           <span className="spacer" />
-          <span className="muted">ctrl+s zapisz · ctrl+w zamknij</span>
+          <span className="muted">ctrl+f szukaj · ctrl+s zapisz · ctrl+w zamknij</span>
         </div>
         {notice && <div className="row yellow">{notice}</div>}
         <Editor
@@ -163,6 +165,7 @@ export function FilesPanel({ active, initialPath, goTo, onCwd, onOpenFile }: {
           path={editor.path}
           initialContent={editor.content}
           active={active}
+          jump={jump}
           onDirty={setDirty}
           onSave={saveFile}
           onClose={closeEditor}
