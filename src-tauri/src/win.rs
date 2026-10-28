@@ -172,7 +172,22 @@ fn exe_icon(exe: &str) -> Option<String> {
 unsafe fn extract_icon_png(exe: &str) -> Option<Vec<u8>> {
     let mut info: SHFILEINFOW = std::mem::zeroed();
     let path = wide(exe);
-    let r = SHGetFileInfoW(path.as_ptr(), 0, &mut info, std::mem::size_of::<SHFILEINFOW>() as u32, SHGFI_ICON | SHGFI_LARGEICON);
+    let r = if exe.starts_with("shell:") {
+        // aplikacje ze Sklepu nie mają pliku .exe: ikonę bierzemy z obiektu powłoki
+        // (shell:AppsFolder\<AppID>), przez jego PIDL, czyli „adres” w przestrzeni nazw Explorera
+        use windows_sys::Win32::System::Com::{CoInitializeEx, CoTaskMemFree, COINIT_APARTMENTTHREADED};
+        use windows_sys::Win32::UI::Shell::{SHParseDisplayName, SHGFI_PIDL};
+        CoInitializeEx(std::ptr::null(), COINIT_APARTMENTTHREADED as u32); // już zainicjowane = też OK
+        let mut pidl = std::ptr::null_mut();
+        if SHParseDisplayName(path.as_ptr(), std::ptr::null_mut(), &mut pidl, 0, std::ptr::null_mut()) < 0 || pidl.is_null() {
+            return None;
+        }
+        let r = SHGetFileInfoW(pidl as *const u16, 0, &mut info, std::mem::size_of::<SHFILEINFOW>() as u32, SHGFI_ICON | SHGFI_LARGEICON | SHGFI_PIDL);
+        CoTaskMemFree(pidl as *const c_void);
+        r
+    } else {
+        SHGetFileInfoW(path.as_ptr(), 0, &mut info, std::mem::size_of::<SHFILEINFOW>() as u32, SHGFI_ICON | SHGFI_LARGEICON)
+    };
     if r == 0 || info.hIcon.is_null() {
         return None;
     }
@@ -491,13 +506,15 @@ pub fn file_icon(path: &str) -> Option<String> {
 }
 
 /// Uruchamia program, skrót, plik albo adres (np. "ms-settings:") tak jak dwuklik w Windows.
+/// Aplikacje ze Sklepu ("shell:AppsFolder\\<AppID>") idą przez explorer.exe: tak robi menu Start.
 pub fn launch(target: &str) -> Result<(), String> {
     use windows_sys::Win32::UI::Shell::ShellExecuteW;
     use windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
     let verb = wide("open");
-    let file = wide(target);
+    let (file, params) = if target.starts_with("shell:") { (wide("explorer.exe"), Some(wide(target))) } else { (wide(target), None) };
+    let params_ptr = params.as_ref().map_or(std::ptr::null(), |p| p.as_ptr());
     let r = unsafe {
-        ShellExecuteW(std::ptr::null_mut(), verb.as_ptr(), file.as_ptr(), std::ptr::null(), std::ptr::null(), SW_SHOWNORMAL)
+        ShellExecuteW(std::ptr::null_mut(), verb.as_ptr(), file.as_ptr(), params_ptr, std::ptr::null(), SW_SHOWNORMAL)
     };
     // ShellExecute zwraca wartość > 32 przy sukcesie
     if (r as isize) > 32 { Ok(()) } else { Err(format!("nie udało się uruchomić: {target}")) }
