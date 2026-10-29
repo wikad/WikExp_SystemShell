@@ -41,7 +41,7 @@ export function xtermTheme(p: Palette) {
 
 // ---------- ustawienia ----------
 export const FONTS = ['"JetBrains Mono"', '"Cascadia Mono"', '"Fira Code"', "Consolas"];
-export const SHELLS = ["powershell.exe", "pwsh.exe", "cmd.exe"];
+export const SHELLS = ["powershell.exe", "pwsh.exe", "cmd.exe", "wsl.exe"];
 
 export type Settings = {
   theme: string;
@@ -56,12 +56,13 @@ export type Settings = {
   showHidden: boolean;
   monitorRefresh: number; // ms
   hideTaskbar: boolean;   // ukryj pasek zadań Windows (pasek boczny WikExp go zastępuje)
+  desktopLayer: boolean;  // WikExp pod innymi programami, jak tapeta (przycisk W chowa programy)
 };
 
 export const DEFAULTS: Settings = {
   theme: "mocha", font: FONTS[0], fontSize: 13, gap: 8, radius: 6,
   shell: "powershell.exe", cursorStyle: "bar", cursorBlink: true, scrollback: 5000,
-  showHidden: false, monitorRefresh: 1000, hideTaskbar: true,
+  showHidden: false, monitorRefresh: 1000, hideTaskbar: true, desktopLayer: false,
 };
 
 const KEY = "wikexp.settings.v1";

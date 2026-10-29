@@ -35,10 +35,10 @@ struct Exit {
 }
 
 #[tauri::command]
-pub fn pty_spawn(app: AppHandle, state: State<'_, PtyState>, id: String, cols: u16, rows: u16, shell: String) -> Result<(), String> {
+pub fn pty_spawn(app: AppHandle, state: State<'_, PtyState>, id: String, cols: u16, rows: u16, shell: String, cwd: Option<String>) -> Result<(), String> {
     // tylko znane shelle: z frontu nie da się podać dowolnego programu
     let program = match shell.as_str() {
-        "powershell.exe" | "pwsh.exe" | "cmd.exe" => shell,
+        "powershell.exe" | "pwsh.exe" | "cmd.exe" | "wsl.exe" => shell,
         _ => "powershell.exe".to_string(),
     };
     if state.sessions.lock().unwrap().contains_key(&id) {
@@ -48,9 +48,14 @@ pub fn pty_spawn(app: AppHandle, state: State<'_, PtyState>, id: String, cols: u
     let pair = native_pty_system()
         .openpty(PtySize { rows, cols, pixel_width: 0, pixel_height: 0 })
         .map_err(|e| e.to_string())?;
+    let mut cmd = CommandBuilder::new(&program);
+    // folder startowy: tylko istniejący katalog, inaczej shell wystartuje w domyślnym
+    if let Some(dir) = cwd.filter(|d| std::path::Path::new(d).is_dir()) {
+        cmd.cwd(dir);
+    }
     let child = pair
         .slave
-        .spawn_command(CommandBuilder::new(&program))
+        .spawn_command(cmd)
         .map_err(|e| e.to_string())?;
     let mut reader = pair.master.try_clone_reader().map_err(|e| e.to_string())?;
     let writer = pair.master.take_writer().map_err(|e| e.to_string())?;

@@ -22,18 +22,25 @@ export function formatSize(b: number){
 
 export const parentDir = (path:string) => invoke<string | null>("parent_dir",{path});
 
-export const ptySpawn = (id: string, cols: number, rows: number, shell: string) => invoke<void>("pty_spawn", { id, cols, rows, shell });
+export const ptySpawn = (id: string, cols: number, rows: number, shell: string, cwd: string | null = null) => invoke<void>("pty_spawn", { id, cols, rows, shell, cwd });
 export const ptyWrite = (id: string, data: string) => invoke<void>("pty_write", { id, data });
 export const ptyResize = (id: string, cols: number, rows: number) => invoke<void>("pty_resize", { id, cols, rows });
 export const ptyKill = (id: string) => invoke<void>("pty_kill", { id });
 export type ProcGroup = { name: string; pids: number[]; cpu: number; memory: number };
-export const listProcesses = () => invoke<ProcGroup[]>("list_processes");
-export const killProcesses = (pids: number[]) => invoke<number>("kill_processes", { pids });
+// źródło danych panelu: "win" (Windows), "wsl" (domyślna dystrybucja) albo "wsl:Nazwa"
+export type Source = string;
+export const listProcesses = (backend: Source = "win") => invoke<ProcGroup[]>("list_processes", { backend });
+export const killProcesses = (pids: number[], backend: Source = "win") => invoke<number>("kill_processes", { pids, backend });
 
 export type Container = { id: string; name: string; image: string; state: string; status: string; ports: string };
 export type DockerAction = "start" | "stop" | "restart" | "rm";
-export const dockerList = () => invoke<Container[]>("docker_list");
-export const dockerAction = (id: string, action: DockerAction) => invoke<void>("docker_action", { id, action });
+export const dockerList = (backend: Source = "win") => invoke<Container[]>("docker_list", { backend });
+export const dockerAction = (id: string, action: DockerAction, backend: Source = "win") => invoke<void>("docker_action", { id, action, backend });
+
+export type Distro = { name: string; running: boolean; version: number; isDefault: boolean };
+export type WslInfo = { distros: Distro[]; vmmem: number };
+export const wslList = () => invoke<WslInfo>("wsl_list");
+export const wslAction = (distro: string, action: "terminate" | "default" | "shutdown") => invoke<void>("wsl_action", { distro, action });
 
 export const readTextFile = (path: string) => invoke<string>("read_text_file", { path });
 export const writeTextFile = (path: string, content: string) => invoke<void>("write_text_file", { path, content });
@@ -54,6 +61,7 @@ export type WinInfo = { hwnd: number; title: string; exe: string; icon: string |
 export const listWindows = () => invoke<WinInfo[]>("list_windows");
 export const windowAction = (hwnd: number, action: "focus" | "minimize" | "close") => invoke<void>("window_action", { hwnd, action });
 export const showMain = () => invoke<void>("show_main");
+export const setDesktopLayer = (enabled: boolean) => invoke<void>("set_desktop_layer", { enabled });
 export const applyShellLayout = (hideTaskbar: boolean) => invoke<void>("apply_shell_layout", { hideTaskbar });
 
 export type Battery = { percent: number; charging: boolean; plugged: boolean; secondsLeft: number | null; saver: boolean };
@@ -69,9 +77,23 @@ export const styleDocked = (hwnd: number, border: string, caption: string, text:
 export type AppEntry = { name: string; target: string };
 export const listApps = (refresh = false) => invoke<AppEntry[]>("list_apps", { refresh });
 export const appIcons = (targets: string[]) => invoke<(string | null)[]>("app_icons", { targets });
+export const logWrite = (level: "info" | "warn" | "error", msg: string) => invoke<void>("log_write", { level, msg });
+export const getLogPath = () => invoke<string | null>("get_log_path");
+export type ShellStatus = { enabled: boolean; value: string | null; exe: string; dev: boolean };
+export type AutostartEntry = { source: string; name: string; command: string; enabled: boolean; folder: boolean };
+export const autostartList = () => invoke<AutostartEntry[]>("autostart_list");
+export type PowerAction = "lock" | "logoff" | "sleep" | "restart" | "shutdown";
+export const powerAction = (action: PowerAction) => invoke<void>("power_action", { action });
+export const shellStatus = () => invoke<ShellStatus>("shell_status");
+export const shellSet = (enabled: boolean) => invoke<void>("shell_set", { enabled });
+export const emergencyExplorer = () => invoke<void>("emergency_explorer");
+export const readFileBytes = (path: string) => invoke<ArrayBuffer>("read_file_bytes", { path });
+export const openPath = (path: string, withDialog = false) => invoke<void>("open_path", { path, withDialog });
 export const launchApp = (target: string) => invoke<void>("launch_app", { target });
 export const toggleLauncher = () => invoke<void>("toggle_launcher");
 export const hideLauncher = () => invoke<void>("hide_launcher");
+export const toggleFlyout = () => invoke<void>("toggle_flyout");
+export const hideFlyout = () => invoke<void>("hide_flyout");
 
 // ---------- git ----------
 export type GitFile = { path: string; status: string; staged: boolean; unstaged: boolean };

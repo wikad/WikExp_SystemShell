@@ -178,6 +178,18 @@ pub fn app_icons(targets: Vec<String>) -> Vec<Option<String>> {
         .collect()
 }
 
+/// Otwiera plik lub folder domyślnym programem Windows (`with_dialog` = okno „Otwórz za pomocą”).
+#[tauri::command]
+pub fn open_path(path: String, with_dialog: bool) -> Result<(), String> {
+    #[cfg(windows)]
+    return crate::win::launch_verb(&path, if with_dialog { "openas" } else { "open" });
+    #[cfg(not(windows))]
+    {
+        let _ = (path, with_dialog);
+        Ok(())
+    }
+}
+
 #[tauri::command]
 pub fn launch_app(app: tauri::AppHandle, target: String) -> Result<(), String> {
     crate::shell::hide_launcher(app);

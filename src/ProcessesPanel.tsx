@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { formatSize, killProcesses, listProcesses, type ProcGroup } from "./api";
+import { formatSize, killProcesses, listProcesses, type ProcGroup, type Source } from "./api";
+import { SourceBar } from "./SourceBar";
 
 type Sort = "cpu" | "mem";
 const REFRESH_MS = 2000;
 
-export function ProcessesPanel({ active }: { active: boolean }) {
+export function ProcessesPanel({ active, source, onSource }: { active: boolean; source: Source; onSource: (s: Source) => void }) {
   const [procs, setProcs] = useState<ProcGroup[]>([]);
   const [sort, setSort] = useState<Sort>("cpu");
   const [selectedName, setSelectedName] = useState<string | null>(null);
@@ -15,14 +16,17 @@ export function ProcessesPanel({ active }: { active: boolean }) {
   // odświeżanie co 2 s (pierwszy pomiar CPU zawsze wychodzi 0, to normalne)
   useEffect(() => {
     let alive = true;
+    setProcs([]);
+    setSelectedName(null);
     const tick = () =>
-      listProcesses()
+      listProcesses(source)
         .then((p) => { if (alive) setProcs(p); })
         .catch((e) => { if (alive) setMsg(String(e)); });
     tick();
-    const id = setInterval(tick, REFRESH_MS);
+    // przez wsl.exe każde odpytanie jest wolniejsze, więc rzadziej
+    const id = setInterval(tick, source === "win" ? REFRESH_MS : REFRESH_MS * 2);
     return () => { alive = false; clearInterval(id); };
-  }, []);
+  }, [source]);
 
   const rows = useMemo(() => {
     const out = [...procs];
@@ -63,14 +67,14 @@ export function ProcessesPanel({ active }: { active: boolean }) {
         if (!g) return;
         if (!confirmKill) { setConfirmKill(true); return; }     // pierwsze x = pytanie
         setConfirmKill(false);
-        killProcesses(g.pids)
+        killProcesses(g.pids, source)
           .then((n) => setMsg(`zabito ${g.name} (${n})`))
           .catch((err) => setMsg(String(err)));
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [active, rows, selected, confirmKill]);
+  }, [active, rows, selected, confirmKill, source]);
 
   // komunikat znika po 4 s
   useEffect(() => {
@@ -87,6 +91,7 @@ export function ProcessesPanel({ active }: { active: boolean }) {
 
   return (
     <div className="procs" ref={listRef}>
+      <SourceBar source={source} onSource={onSource} active={active} />
       <div className="row head">
         <span className="c-name">NAME</span>
         <span className={`c-num ${sort === "cpu" ? "accent" : ""}`}>CPU</span>

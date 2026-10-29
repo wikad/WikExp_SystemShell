@@ -1,9 +1,11 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { applyShellLayout, focusMain, windowAction, type WinInfo } from "./api";
+import { applyShellLayout, focusMain, setDesktopLayer, windowAction, type WinInfo } from "./api";
 import { useSettings } from "./settings";
 import { useCallback, useEffect, useRef, useState } from "react";
 import "./App.css";
 import { TerminalPanel } from "./TerminalPanel";
+import { ClaudePanel } from "./ClaudePanel";
+import { WslPanel } from "./WslPanel";
 import { TreePanel } from "./TreePanel";
 import { FilesPanel, type OpenFile } from "./FilesPanel";
 import { ProcessesPanel } from "./ProcessesPanel";
@@ -79,7 +81,7 @@ function findNeighbor(from: PanelId, dir: Dir, recent: PanelId[]): PanelId | nul
 
 const MODE: Record<PanelKind | "editor", string> = {
     editor: "EDYCJA",
-    tree: "NORMAL", files: "NORMAL", terminal: "TERMINAL", side: "PROCESY", docker: "DOCKER", monitor: "MONITOR", settings: "USTAWIENIA", app: "PROGRAM", git: "GIT", search: "SZUKAJ",
+    tree: "NORMAL", files: "NORMAL", terminal: "TERMINAL", side: "PROCESY", docker: "DOCKER", monitor: "MONITOR", settings: "USTAWIENIA", app: "PROGRAM", git: "GIT", search: "SZUKAJ", claude: "CLAUDE", wsl: "WSL", wslmgr: "WSL",
   };
 
 // ostatnie foldery paneli plików, żeby po restarcie każdy wrócił tam, gdzie był
@@ -98,8 +100,9 @@ export default function App() {
   const [layout, setLayout] = useState<Rect[]>(loadLayout);
 
   // pełny ekran: z ukrytym paskiem Windows całe miejsce poza paskiem bocznym, bez = obszar roboczy
-  const { hideTaskbar } = useSettings().settings;
+  const { hideTaskbar, desktopLayer } = useSettings().settings;
   useEffect(() => { applyShellLayout(hideTaskbar).catch(() => {}); }, [hideTaskbar]);
+  useEffect(() => { setDesktopLayer(desktopLayer).catch(() => {}); }, [desktopLayer]);
   const [active, setActive] = useState<PanelId>(() => layout[0]?.id ?? "files");
   useEffect(() => saveLayout(layout), [layout]);
   const activeKind: PanelKind = layout.find((r) => r.id === active)?.kind ?? "files";
@@ -118,6 +121,54 @@ export default function App() {
   }, [cwds]);
   const reportCwd = useCallback((id: string, cwd: string) => {
     setCwds((c) => (c[id] === cwd ? c : { ...c, [id]: cwd }));
+  }, []);
+
+  // źródło paneli docker i procesy (id → "win" | "wsl" | "wsl:Nazwa"), pamiętane między restartami
+  const [sources, setSources] = useState<Record<string, string>>(() => {
+    try { return JSON.parse(localStorage.getItem("wikexp.sources.v1") ?? "{}"); } catch { return {}; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem("wikexp.sources.v1", JSON.stringify(sources)); } catch { /* ignoruj */ }
+  }, [sources]);
+  useEffect(() => {
+    setSources((s) => {
+      const keep = Object.fromEntries(Object.entries(s).filter(([id]) => layout.some((r) => r.id === id)));
+      return Object.keys(keep).length === Object.keys(s).length ? s : keep;
+    });
+  }, [layout]);
+  const setSourceOf = useCallback((id: string, src: string) => setSources((s) => ({ ...s, [id]: src })), []);
+  const toneOf = (r: Rect): "wsl" | undefined => (sources[r.id] && sources[r.id] !== "win" ? "wsl" : undefined);
+  const srcTitle = (r: Rect) => (sources[r.id] && sources[r.id] !== "win" ? `${instanceTitle(r)} · ${sources[r.id].replace(/^wsl:?/, "") || "WSL"}` : instanceTitle(r));
+
+  // panele claude: wybrany folder każdego (id → ścieżka) i lista ostatnich folderów
+  const [claudeDirs, setClaudeDirs] = useState<Record<string, string>>(() => {
+    try { return JSON.parse(localStorage.getItem("wikexp.claude.dirs.v1") ?? "{}"); } catch { return {}; }
+  });
+  const [claudeRecent, setClaudeRecent] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem("wikexp.claude.recent.v1") ?? "[]"); } catch { return []; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem("wikexp.claude.dirs.v1", JSON.stringify(claudeDirs)); } catch { /* ignoruj */ }
+  }, [claudeDirs]);
+  useEffect(() => {
+    try { localStorage.setItem("wikexp.claude.recent.v1", JSON.stringify(claudeRecent)); } catch { /* ignoruj */ }
+  }, [claudeRecent]);
+  // zamknięty panel zapomina folder: nowy panel claude zawsze pyta
+  useEffect(() => {
+    setClaudeDirs((d) => {
+      const keep = Object.fromEntries(Object.entries(d).filter(([id]) => layout.some((r) => r.id === id)));
+      return Object.keys(keep).length === Object.keys(d).length ? d : keep;
+    });
+  }, [layout]);
+  const pickClaude = useCallback((id: string, dir: string) => {
+    setClaudeDirs((d) => ({ ...d, [id]: dir }));
+    setClaudeRecent((r) => [dir, ...r.filter((p) => p !== dir)].slice(0, 10));
+  }, []);
+  const resetClaude = useCallback((id: string) => {
+    setClaudeDirs((d) => { const { [id]: _, ...rest } = d; return rest; });
+  }, []);
+  const forgetClaude = useCallback((dir: string) => {
+    setClaudeRecent((r) => r.filter((p) => p !== dir));
   }, []);
 
   // drzewo steruje ostatnio aktywnym panelem plików
@@ -372,12 +423,36 @@ export default function App() {
             />
           ),
         };
+      case "wsl":
+        // wsl.exe startuje w folderze z panelu plików (WSL sam zamienia C:\x na /mnt/c/x)
+        return {
+          title: instanceTitle(r),
+          body: <TerminalPanel sessionId={r.id} active={isActive} shell="wsl.exe" cwd={linkedFiles ? cwds[linkedFiles] ?? null : null} />,
+        };
+      case "claude":
+        return {
+          title: claudeDirs[r.id] ? `${instanceTitle(r)} · ${claudeDirs[r.id]}` : instanceTitle(r),
+          body: (
+            <ClaudePanel
+              sessionId={r.id}
+              active={isActive}
+              dir={claudeDirs[r.id] ?? null}
+              linkedDir={linkedFiles ? cwds[linkedFiles] ?? null : null}
+              recent={claudeRecent}
+              onPick={(d) => pickClaude(r.id, d)}
+              onForget={forgetClaude}
+              onReset={() => resetClaude(r.id)}
+            />
+          ),
+        };
       case "terminal":
         return { title: instanceTitle(r), body: <TerminalPanel sessionId={r.id} active={isActive} /> };
       case "side":
-        return { title: instanceTitle(r), body: <ProcessesPanel active={isActive} /> };
+        return { title: srcTitle(r), tone: toneOf(r), body: <ProcessesPanel active={isActive} source={sources[r.id] ?? "win"} onSource={(s) => setSourceOf(r.id, s)} /> };
       case "docker":
-        return { title: instanceTitle(r), body: <DockerPanel active={isActive} /> };
+        return { title: srcTitle(r), tone: toneOf(r), body: <DockerPanel active={isActive} source={sources[r.id] ?? "win"} onSource={(s) => setSourceOf(r.id, s)} /> };
+      case "wslmgr":
+        return { title: instanceTitle(r), body: <WslPanel active={isActive} /> };
       case "app":
         return {
           title: (tooSmall[r.id] ? "⚠ za mało miejsca · " : "") + (docked[r.id] ? docked[r.id]!.title : instanceTitle(r)),
@@ -414,7 +489,7 @@ export default function App() {
 
   return (
     <div className="shell">
-      <Workspace layout={layout} onLayout={setLayout} active={active} onActivate={setActive} render={render} zoomed={zoomed} />
+      <Workspace layout={layout} onLayout={setLayout} active={active} onActivate={setActive} render={render} zoomed={zoomed} onPreset={setSourceOf} />
 
       <footer className="status">
         <span className="mode">{activeKind === "files" && openFiles[active] ? MODE.editor : MODE[activeKind]}</span>

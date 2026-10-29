@@ -1,7 +1,9 @@
-import { useEffect, useReducer, useState } from "react";
+import { useEffect, useReducer, useRef, useState } from "react";
 import { homeDir } from "@tauri-apps/api/path";
-import { formatSize, parentDir, readDir, readTextFile, writeTextFile, type FileEntry } from "./api";
+import { formatSize, openPath, parentDir, readDir, readTextFile, writeTextFile, type FileEntry } from "./api";
 import { Editor, type Jump } from "./Editor";
+import { MdPreview } from "./MdPreview";
+import { PdfView } from "./PdfView";
 import { useSettings } from "./settings";
 import { useGit, gitStatusOf } from "./useGit";
 
@@ -39,6 +41,15 @@ function navReducer(s: Nav, a: NavAction): Nav {
  * - onCwd: zgłasza zmianę folderu do App (tytuł panelu, drzewo, zapis)
  * - onOpenFile: zgłasza otwarty plik (podświetlenie w drzewie, tytuł) albo null
  */
+// pliki bez podglądu w panelu (PDF i Markdown mają własny): Enter / dwuklik otwiera je domyślnym programem Windows
+// (exe, bat itp. celowo nie: przypadkowy Enter nie może niczego uruchamiać; do tego jest `o`)
+const EXTERNAL_EXT = new Set([
+  "png", "jpg", "jpeg", "gif", "webp", "bmp", "tif", "tiff", "heic",
+  "doc", "docx", "xls", "xlsx", "ppt", "pptx", "odt", "ods", "odp",
+  "zip", "7z", "rar", "mp3", "wav", "flac", "ogg", "mp4", "mkv", "avi", "mov", "webm",
+]);
+const extOf = (p: string) => (p.includes(".") ? p.slice(p.lastIndexOf(".") + 1).toLowerCase() : "");
+
 export function FilesPanel({ active, initialPath, goTo, onCwd, onOpenFile }: {
   active: boolean;
   initialPath: string | null;
@@ -60,11 +71,16 @@ export function FilesPanel({ active, initialPath, goTo, onCwd, onOpenFile }: {
   const [dirty, setDirty] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [closeArmed, setCloseArmed] = useState(false);
+  const [pdf, setPdf] = useState<string | null>(null);            // otwarty podgląd PDF
+  const [showPreview, setShowPreview] = useState(false);          // podgląd .md obok edytora
+  const [liveText, setLiveText] = useState("");                   // bieżący tekst edytora dla podglądu .md
+  const pendingText = useRef("");
+  const [previewTick, setPreviewTick] = useState(0);
   const [jump, setJump] = useState<Jump | null>(null); // linia, na którą skoczyć w edytorze
 
   useEffect(() => {
-    onOpenFile(editor ? { path: editor.path, dirty } : null);
-  }, [editor?.path, dirty]); // eslint-disable-line react-hooks/exhaustive-deps
+    onOpenFile(editor ? { path: editor.path, dirty } : pdf ? { path: pdf, dirty: false } : null);
+  }, [editor?.path, dirty, pdf]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!closeArmed) return;
@@ -72,7 +88,29 @@ export function FilesPanel({ active, initialPath, goTo, onCwd, onOpenFile }: {
     return () => clearTimeout(id);
   }, [closeArmed]);
 
-  const openFile = (path: string, at?: { line: number; col: number; len: number }) => {
+  // domyślny program Windows (with_dialog = „Otwórz za pomocą…”)
+  const openExternal = (path: string, withDialog = false) => {
+    openPath(path, withDialog)
+      .then(() => setNotice(null))
+      .catch((e) => setNotice(String(e)));
+  };
+
+  // podgląd .md: tekst z edytora z lekkim opóźnieniem, żeby nie renderować przy każdym klawiszu
+  useEffect(() => {
+    if (!showPreview) return;
+    const id = setTimeout(() => setLiveText(pendingText.current), 150);
+    return () => clearTimeout(id);
+  }, [showPreview, previewTick]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // preview = otwórz od razu z podglądem (.md); PDF zawsze w podglądzie
+  const openFile = (path: string, at?: { line: number; col: number; len: number }, preview = false) => {
+    const ext = extOf(path);
+    if (!at && ext === "pdf") {
+      if (editor && dirty) { setNotice("niezapisane zmiany: ctrl+s zapisz albo ctrl+w ×2 zamknij bez zapisu"); return; }
+      setEditor(null); setDirty(false); setNotice(null); setPdf(path);
+      return;
+    }
+    if (!at && EXTERNAL_EXT.has(ext)) { openExternal(path); return; }
     const pos = at ? { ...at, n: (jump?.n ?? 0) + 1 } : null;
     if (editor?.path === path) { if (pos) setJump(pos); return; }
     if (editor && dirty) {
@@ -80,7 +118,10 @@ export function FilesPanel({ active, initialPath, goTo, onCwd, onOpenFile }: {
       return;
     }
     readTextFile(path)
-      .then((content) => { setEditor({ path, content }); setJump(pos); setDirty(false); setNotice(null); })
+      .then((content) => {
+        setPdf(null); setEditor({ path, content }); setJump(pos); setDirty(false); setNotice(null);
+        pendingText.current = content; setLiveText(content); setShowPreview(preview && ext === "md");
+      })
       .catch((e) => setNotice(String(e)));
   };
 
@@ -120,7 +161,7 @@ export function FilesPanel({ active, initialPath, goTo, onCwd, onOpenFile }: {
   }, [cwd]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (!active || editor) return;          // w edytorze klawisze idą do tekstu
+    if (!active || editor || pdf) return;   // w edytorze klawisze idą do tekstu
     const onKey = (e: KeyboardEvent) => {
       if (e.altKey || e.ctrlKey) return;
       if (e.key === "j" || e.key === "ArrowDown") {
@@ -137,6 +178,16 @@ export function FilesPanel({ active, initialPath, goTo, onCwd, onOpenFile }: {
       } else if ((e.key === "Backspace" || e.key === "h") && cwd) {
         e.preventDefault();
         parentDir(cwd).then((p) => { if (p) dispatch({ type: "go", path: p }); });
+      } else if (e.key === "p") {
+        // p = podgląd: PDF w panelu, .md w edytorze z podglądem obok
+        e.preventDefault();
+        const f = files[selected];
+        if (f && !f.isDir) openFile(f.path, undefined, true);
+      } else if (e.key === "o" || e.key === "O") {
+        // o = domyślny program, O (Shift+o) = „Otwórz za pomocą…”; działa na każdym pliku i folderze
+        e.preventDefault();
+        const f = files[selected];
+        if (f) openExternal(f.path, e.key === "O");
       } else if (e.key === "H") {
         e.preventDefault();
         dispatch({ type: "back" });
@@ -147,29 +198,68 @@ export function FilesPanel({ active, initialPath, goTo, onCwd, onOpenFile }: {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [active, files, selected, cwd, editor, dirty]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [active, files, selected, cwd, editor, pdf, dirty]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // podgląd PDF: Esc / q / Ctrl+W zamyka, o = zewnętrzny program (gdy fokus jest poza ramką PDF)
+  useEffect(() => {
+    if (!active || !pdf) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.altKey) return;
+      if (e.key === "Escape" || (!e.ctrlKey && e.key === "q") || (e.ctrlKey && e.key === "w")) {
+        e.preventDefault(); setPdf(null);
+      } else if (!e.ctrlKey && (e.key === "o" || e.key === "O")) {
+        e.preventDefault(); openExternal(pdf, e.key === "O");
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [active, pdf]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (pdf) {
+    const name = pdf.slice(pdf.lastIndexOf("\\") + 1);
+    return (
+      <div className="editor-wrap">
+        <div className="editor-bar">
+          <span className="accent">{name}</span>
+          <span className="spacer" />
+          <span className="muted">esc zamknij · o zewnętrzny program · O otwórz za pomocą…</span>
+          <span className="pdf-close" onClick={() => setPdf(null)}>✕</span>
+        </div>
+        {notice && <div className="row yellow">{notice}</div>}
+        <PdfView path={pdf} />
+      </div>
+    );
+  }
 
   if (editor) {
     const name = editor.path.slice(editor.path.lastIndexOf("\\") + 1);
+    const isMd = extOf(editor.path) === "md" || extOf(editor.path) === "markdown";
     return (
       <div className="editor-wrap">
         <div className="editor-bar">
           <span className="accent">{name}</span>
           {dirty && <span className="yellow"> ●</span>}
           <span className="spacer" />
-          <span className="muted">ctrl+f szukaj · ctrl+s zapisz · ctrl+w zamknij</span>
+          <span className="muted">
+            ctrl+f szukaj · ctrl+s zapisz · {isMd ? "ctrl+shift+v podgląd · " : ""}ctrl+w zamknij
+          </span>
         </div>
         {notice && <div className="row yellow">{notice}</div>}
-        <Editor
-          key={editor.path}
-          path={editor.path}
-          initialContent={editor.content}
-          active={active}
-          jump={jump}
-          onDirty={setDirty}
-          onSave={saveFile}
-          onClose={closeEditor}
-        />
+        <div className="editor-split">
+          <Editor
+            key={editor.path}
+            path={editor.path}
+            initialContent={editor.content}
+            active={active}
+            jump={jump}
+            onDirty={setDirty}
+            onSave={saveFile}
+            onClose={closeEditor}
+            onChange={isMd ? (t) => { pendingText.current = t; setPreviewTick((n) => n + 1); } : undefined}
+            onTogglePreview={isMd ? () => { setLiveText(pendingText.current); setShowPreview((v) => !v); } : undefined}
+          />
+          {isMd && showPreview && <MdPreview text={liveText} />}
+        </div>
       </div>
     );
   }

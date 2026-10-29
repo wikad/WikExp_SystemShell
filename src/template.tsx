@@ -11,6 +11,7 @@ type Props = {
 
 // 3. KOMPONENT: zwykła funkcja, nazwa wielką literą, eksportowana
 export function Nazwa({ active }: Props) {
+  void active; // szablon nie używa propsa; w prawdziwym komponencie usuń tę linię
 
   // 3a. HOOKI: stan, referencje, efekty. Zawsze na górze funkcji, nigdy w if/pętli
   const ref = useRef<HTMLDivElement>(null);

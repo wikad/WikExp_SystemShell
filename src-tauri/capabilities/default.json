@@ -5,7 +5,8 @@
   "windows": [
     "main",
     "bar",
-    "launcher"
+    "launcher",
+    "flyout"
   ],
   "permissions": [
     "core:default",

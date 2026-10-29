@@ -62,7 +62,7 @@ export type Jump = { line: number; col: number; len: number; n: number };
  * Ctrl+F szuka w pliku (wbudowane w CodeMirror, z polem zamiany), Ctrl+Alt+G idzie do linii.
  * - jump: przejdź do linii i zaznacz trafienie (z wyszukiwania w projekcie); `n` rośnie przy każdym żądaniu
  */
-export function Editor({ path, initialContent, active, jump, onDirty, onSave, onClose }: {
+export function Editor({ path, initialContent, active, jump, onDirty, onSave, onClose, onChange, onTogglePreview }: {
   path: string;
   initialContent: string;
   active: boolean;
@@ -70,6 +70,8 @@ export function Editor({ path, initialContent, active, jump, onDirty, onSave, on
   onDirty: (dirty: boolean) => void;
   onSave: (content: string) => Promise<void>;
   onClose: () => void;
+  onChange?: (text: string) => void;          // każda zmiana tekstu (podgląd na żywo)
+  onTogglePreview?: () => void;               // Ctrl+Shift+V, tylko dla plików z podglądem (.md)
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
@@ -78,8 +80,8 @@ export function Editor({ path, initialContent, active, jump, onDirty, onSave, on
   const look = useRef({ palette, settings });
   look.current = { palette, settings };
   // aktualne callbacki dla keymapy (bez odtwarzania edytora przy każdym renderze)
-  const cb = useRef({ onDirty, onSave, onClose });
-  cb.current = { onDirty, onSave, onClose };
+  const cb = useRef({ onDirty, onSave, onClose, onChange, onTogglePreview });
+  cb.current = { onDirty, onSave, onClose, onChange, onTogglePreview };
 
   useEffect(() => {
     const host = hostRef.current;
@@ -112,11 +114,16 @@ export function Editor({ path, initialContent, active, jump, onDirty, onSave, on
           Prec.highest(keymap.of([
             { key: "Mod-s", run: save, preventDefault: true },
             { key: "Mod-w", run: () => { cb.current.onClose(); return true; }, preventDefault: true },
+            { key: "Mod-Shift-v", run: () => { if (!cb.current.onTogglePreview) return false; cb.current.onTogglePreview(); return true; }, preventDefault: true },
           ])),
           themeComp.current.of(buildTheme(look.current.palette, look.current.settings.font, look.current.settings.fontSize)),
           language.of([]),
           EditorView.updateListener.of((u) => {
-            if (u.docChanged) cb.current.onDirty(u.state.sliceDoc() !== saved);
+            if (u.docChanged) {
+              const text = u.state.sliceDoc();
+              cb.current.onDirty(text !== saved);
+              cb.current.onChange?.(text);
+            }
           }),
         ],
       }),

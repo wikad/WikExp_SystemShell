@@ -51,6 +51,20 @@
         "shadow": true,
         "maximizable": false,
         "minimizable": false
+      },
+      {
+        "label": "flyout",
+        "title": "WikExp panel",
+        "width": 270,
+        "height": 330,
+        "decorations": false,
+        "resizable": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "visible": false,
+        "shadow": true,
+        "maximizable": false,
+        "minimizable": false
       }
     ],
     "security": {

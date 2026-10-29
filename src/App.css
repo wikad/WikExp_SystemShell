@@ -315,6 +315,13 @@ body.is-bar { background: var(--mantle); }
 }
 .bar-search:hover { background: color-mix(in srgb, var(--surface) 70%, transparent); color: var(--accent); }
 
+/* przycisk zasilania na pasku */
+.bar-power {
+  width: 32px; height: 28px; border-radius: 9px; flex: none; display: grid; place-items: center;
+  background: transparent; color: var(--muted); transition: background 0.12s ease, color 0.12s ease;
+}
+.bar-power:hover { background: color-mix(in srgb, var(--surface) 70%, transparent); color: var(--red); }
+
 /* ---------- launcher (osobne okno "launcher", 340×376) ---------- */
 body.is-launcher { background: var(--mantle); }
 .launcher {
@@ -336,6 +343,28 @@ body.is-launcher { background: var(--mantle); }
 .lc-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lc-empty { padding: 18px 10px; text-align: center; }
 .lc-foot { font-size: 0.78em; padding: 6px 12px 8px; border-top: 1px solid var(--overlay); }
+
+/* ---------- wysuwany panel zasilania (osobne okno "flyout", 270×330) ---------- */
+body.is-flyout { background: var(--mantle); }
+.flyout { height: 100vh; background: var(--mantle); border: 1px solid var(--accent); border-radius: 12px; overflow: hidden; outline: none; }
+.fo-inner { height: 100%; display: flex; flex-direction: column; padding: 8px 8px 6px; animation: fo-in 0.18s cubic-bezier(0.2, 0.8, 0.2, 1); }
+@keyframes fo-in { from { opacity: 0; transform: translateX(-22px); } to { opacity: 1; transform: none; } }
+.fo-title { color: var(--accent); font-size: 0.78em; letter-spacing: 0.08em; text-transform: uppercase; padding: 6px 10px 6px; }
+.fo-row { display: flex; align-items: center; gap: 12px; padding: 9px 10px; border-radius: 10px; cursor: pointer; min-height: 44px; transition: background 0.1s ease; }
+.fo-row.sel { background: var(--surface); box-shadow: inset 3px 0 0 var(--accent); }
+.fo-row.danger.sel { box-shadow: inset 3px 0 0 var(--red); }
+.fo-icon { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; flex: none; background: var(--base); color: var(--accent); }
+.fo-row.danger .fo-icon { color: var(--red); }
+.fo-row.ask { background: color-mix(in srgb, var(--red) 14%, var(--surface)); }
+.fo-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+.fo-hint { font-size: 0.78em; }
+.fo-ask { display: flex; align-items: center; gap: 8px; flex: 1; }
+.fo-ask .fo-label { flex: 1; color: var(--red); }
+.fo-yes, .fo-no { font: inherit; padding: 3px 12px; border-radius: 999px; border: 1px solid var(--overlay); background: var(--base); color: var(--text); cursor: pointer; }
+.fo-yes { background: var(--red); border-color: var(--red); color: var(--crust); font-weight: 700; }
+.fo-no:hover { border-color: var(--accent); color: var(--accent); }
+.fo-error { padding: 4px 10px; font-size: 0.85em; }
+.fo-foot { margin-top: auto; font-size: 0.75em; text-align: center; padding: 6px 0 2px; border-top: 1px solid var(--overlay); }
 
 /* ---------- git: kolory plików w drzewie i panelu plików ---------- */
 .git-modified { color: var(--yellow) !important; }
@@ -432,3 +461,54 @@ body.is-launcher { background: var(--mantle); }
 .editor-host .cm-search input[type="checkbox"] { accent-color: var(--accent); margin: 0; }
 .editor-host .cm-search button[name="close"] { background: transparent; border: 0; color: var(--muted); font-size: 1.2em; cursor: pointer; margin-left: auto; }
 .editor-host .cm-searchMatch-selected { background-color: color-mix(in srgb, var(--accent) 40%, transparent); }
+
+/* panel claude: ramka i tytuł w kolorze orange z aktualnego motywu */
+.panel-claude.active { border-color: var(--orange); }   /* kolorowa ramka tylko aktywnego panelu */
+.panel-claude .panel-title { color: var(--orange); }
+
+/* panel claude: ekran wyboru folderu */
+.cl-pick { display: flex; flex-direction: column; gap: 2px; outline: none; height: 100%; }
+.cl-head { padding: 0 4px 6px; }
+.cl-item { display: flex; align-items: center; gap: 12px; padding: 3px 8px; cursor: pointer; border-radius: 4px; min-width: 0; }
+.cl-item:hover { background: color-mix(in srgb, var(--surface) 60%, transparent); }
+.cl-item.sel { background: var(--surface); box-shadow: inset 3px 0 0 #fab387; }
+.cl-tag { margin-left: auto; white-space: nowrap; }
+.cl-hint { margin-top: auto; padding: 8px 4px 0; font-size: 0.85em; }
+
+/* podgląd w panelu plików: .md obok edytora, PDF na całą szerokość */
+.editor-split { flex: 1; min-height: 0; display: flex; }
+.editor-split .editor-host { min-width: 0; }
+.pdf-frame { flex: 1; width: 100%; min-height: 0; border: 0; background: var(--mantle); }
+.pdf-close { cursor: pointer; color: var(--muted); padding: 0 4px; }
+.pdf-close:hover { color: var(--red); }
+.md-preview {
+  flex: 1; min-width: 0; overflow: auto; padding: 8px 20px 20px; border-left: 1px solid var(--overlay);
+  line-height: 1.6; user-select: text; font-family: "Segoe UI", system-ui, sans-serif;
+}
+.md-preview h1, .md-preview h2, .md-preview h3, .md-preview h4, .md-preview h5, .md-preview h6 { color: var(--accent); margin: 1.1em 0 0.4em; line-height: 1.25; }
+.md-preview h1 { font-size: 1.7em; border-bottom: 1px solid var(--overlay); padding-bottom: 0.2em; }
+.md-preview h2 { font-size: 1.4em; border-bottom: 1px solid var(--overlay); padding-bottom: 0.2em; }
+.md-preview h3 { font-size: 1.2em; }
+.md-preview p { margin: 0.6em 0; }
+.md-preview a { color: var(--blue); text-decoration: underline; cursor: pointer; }
+.md-preview code { font-family: var(--mono, "JetBrains Mono", Consolas, monospace); background: var(--mantle); padding: 1px 5px; border-radius: 4px; font-size: 0.92em; }
+.md-preview pre { background: var(--mantle); border: 1px solid var(--overlay); border-radius: 6px; padding: 10px 12px; overflow: auto; }
+.md-preview pre code { background: transparent; padding: 0; }
+.md-preview blockquote { margin: 0.6em 0; padding: 0 12px; border-left: 3px solid var(--accent); color: var(--muted); }
+.md-preview ul, .md-preview ol { padding-left: 1.6em; margin: 0.4em 0; }
+.md-preview li.md-task { list-style: none; margin-left: -1.2em; }
+.md-preview hr { border: 0; border-top: 1px solid var(--overlay); margin: 1em 0; }
+.md-preview table { border-collapse: collapse; margin: 0.8em 0; }
+.md-preview th, .md-preview td { border: 1px solid var(--overlay); padding: 4px 10px; }
+.md-preview th { background: var(--mantle); }
+.md-preview .md-img { color: var(--muted); font-style: italic; }
+
+/* panel wsl */
+.panel-wsl.active, .tone-wsl.active { border-color: var(--green); }
+.panel-wsl .panel-title, .tone-wsl .panel-title { color: var(--green); }
+
+/* pasek wyboru źródła (Windows / WSL) w panelach docker i procesy */
+.src-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 0 4px 4px; }
+.src-chip { padding: 0 8px; border: 1px solid var(--overlay); border-radius: 10px; cursor: pointer; color: var(--muted); }
+.src-chip:hover { border-color: var(--green); color: var(--text); }
+.src-chip.on { border-color: var(--green); color: var(--green); }

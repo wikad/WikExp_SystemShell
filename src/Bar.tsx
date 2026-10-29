@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Menu } from "@tauri-apps/api/menu";
 import { emit } from "@tauri-apps/api/event";
-import { batteryStatus, listWindows, showMain, toggleLauncher, windowAction, type Battery, type WinInfo } from "./api";
+import { batteryStatus, listWindows, showMain, toggleFlyout, toggleLauncher, windowAction, type Battery, type WinInfo } from "./api";
 
 const fmtLeft = (s: number) => {
   const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
@@ -116,6 +116,11 @@ export function Bar() {
       </div>
 
       <div className="bar-sep" />
+      <button className="bar-power" title="zasilanie" onClick={() => toggleFlyout()}>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
+          <path d="M12 3v9" /><path d="M6.4 6.6a8 8 0 1 0 11.2 0" />
+        </svg>
+      </button>
       {battery && (
         <div
           className="bar-battery"

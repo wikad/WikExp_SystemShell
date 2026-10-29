@@ -12,12 +12,13 @@ type Drag =
   | { kind: "resize"; id: PanelId; edge: Edge; result: Rect[] | null; linked: boolean };
 
 /** Pozycja menu panelu (prawy klik): tekst + akcja albo separator. */
-export type MenuEntry = { text: string; action: () => void } | "separator";
+export type MenuEntry = { text: string; action: () => void } | { text: string; sub: MenuEntry[] } | "separator";
 
 export type PanelView = {
   title: string;
   body: ReactNode;
   menu?: MenuEntry[];   // dodatkowe pozycje menu pod prawym klikiem (nad „zamknij panel”)
+  tone?: "wsl";         // kolor ramki z motywu (np. panel docker / procesy ze źródłem WSL)
   compact?: boolean;    // zamiast nagłówka cienki uchwyt, treść do samej krawędzi (np. okno programu)
 };
 
@@ -30,20 +31,27 @@ const gridPos = (r: Omit<Rect, "id" | "kind">) => ({
  * Natywne menu Windows (Tauri). W przeciwieństwie do menu z HTML zawsze jest na wierzchu,
  * więc nie chowa się za oknami programów włożonymi w panele.
  */
+type NativeItem = { item: "Separator" } | { id: string; text: string; action: () => void } | { text: string; items: NativeItem[] };
+let menuSeq = 0;
+const toNative = (entries: MenuEntry[]): NativeItem[] =>
+  entries.map((e) =>
+    e === "separator" ? { item: "Separator" as const }
+    : "sub" in e ? { text: e.text, items: toNative(e.sub) }
+    : { id: `m${menuSeq++}`, text: e.text, action: e.action });
+
 async function popup(entries: MenuEntry[]) {
-  const menu = await Menu.new({
-    items: entries.map((e, i) => (e === "separator" ? { item: "Separator" as const } : { id: `m${i}`, text: e.text, action: e.action })),
-  });
+  const menu = await Menu.new({ items: toNative(entries) });
   await menu.popup();
 }
 
-export function Workspace({ layout, onLayout, active, onActivate, render, zoomed }: {
+export function Workspace({ layout, onLayout, active, onActivate, render, zoomed, onPreset }: {
   zoomed?: PanelId | null;   // panel rozciągnięty na całą przestrzeń
   layout: Rect[];
   onLayout: (l: Rect[]) => void;
   active: PanelId;
   onActivate: (id: PanelId) => void;
   render: (r: Rect) => PanelView;
+  onPreset?: (id: PanelId, preset: string) => void;   // źródło ustawione od razu przy dodaniu panelu (np. docker z WSL)
 }) {
   const wsRef = useRef<HTMLDivElement>(null);
   const GAP = useSettings().settings.gap; // ten sam odstęp co --gap w CSS
@@ -119,8 +127,9 @@ export function Workspace({ layout, onLayout, active, onActivate, render, zoomed
   };
 
   // dodanie nowej instancji panelu w wolne miejsce
-  const place = (kind: PanelKind, rect: Omit<Rect, "id" | "kind">) => {
+  const place = (kind: PanelKind, rect: Omit<Rect, "id" | "kind">, preset?: string) => {
     const id = newId(live.current.layout, kind);
+    if (preset) onPreset?.(id, preset);
     onLayout([...live.current.layout, { id, kind, ...rect }]);
     onActivate(id);
   };
@@ -132,7 +141,19 @@ export function Workspace({ layout, onLayout, active, onActivate, render, zoomed
     const g = toGrid(e.clientX, e.clientY);
     const rect = largestFreeRect(layout, g.cx, g.cy);
     if (!rect) return;
-    popup(ALL_KINDS.map((kind) => ({ text: `Nowy panel: ${PANEL_NAMES[kind]}`, action: () => place(kind, rect) })));
+    popup([
+      ...ALL_KINDS.filter((k) => k !== "wsl" && k !== "wslmgr")
+        .map((kind) => ({ text: `Nowy panel: ${PANEL_NAMES[kind]}`, action: () => place(kind, rect) })),
+      {
+        text: "Nowy panel: WSL",
+        sub: [
+          { text: "terminal", action: () => place("wsl", rect) },
+          { text: "dystrybucje", action: () => place("wslmgr", rect) },
+          { text: "docker (z WSL)", action: () => place("docker", rect, "wsl") },
+          { text: "procesy (z WSL)", action: () => place("side", rect, "wsl") },
+        ],
+      },
+    ]);
   };
 
   // prawy klik na nagłówku / uchwycie panelu → opcje panelu
@@ -166,7 +187,7 @@ export function Workspace({ layout, onLayout, active, onActivate, render, zoomed
           <section
             key={r.id}
             data-panel={r.id}
-            className={`panel ${view.compact ? "compact" : ""} ${active === r.id ? "active" : ""} ${drag?.kind === "move" && drag.id === r.id && drag.moved ? "lifted" : ""}`}
+            className={`panel panel-${r.kind} ${view.tone ? `tone-${view.tone}` : ""} ${view.compact ? "compact" : ""} ${active === r.id ? "active" : ""} ${drag?.kind === "move" && drag.id === r.id && drag.moved ? "lifted" : ""}`}
             style={zoomed === r.id ? { gridColumn: "1 / -1", gridRow: "1 / -1", zIndex: 20 } : gridPos(r)}
             onMouseDown={() => onActivate(r.id)}
           >

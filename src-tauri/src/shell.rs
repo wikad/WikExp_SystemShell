@@ -101,7 +101,7 @@ pub fn setup(app: &AppHandle) {
     let main = app.get_webview_window("main");
     if let (Some(bar), Some(main)) = (app.get_webview_window("bar"), main.as_ref()) {
         if let Some(m) = primary(main) {
-            eprintln!("[shell] monitor {}x{} @ {},{} skala {}", m.w, m.h, m.x, m.y, m.scale);
+            crate::logi!("[shell] monitor {}x{} @ {},{} skala {}", m.w, m.h, m.x, m.y, m.scale);
             let width = (BAR_WIDTH * m.scale).round() as i32;
             #[allow(unused_mut)]
             let mut rect = (m.x, m.y, width, m.h);
@@ -113,7 +113,7 @@ pub fn setup(app: &AppHandle) {
                 let rc = crate::win::register_appbar(hwnd, mon, width);
                 rect = (rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top);
                 *APPBAR_HWND.lock().unwrap() = Some(hwnd);
-                eprintln!("[shell] AppBar zarejestrowany: {:?}", rect);
+                crate::logi!("[shell] AppBar zarejestrowany: {:?}", rect);
             }
             *BAR_RECT.lock().unwrap() = Some(rect);
             let _ = bar.set_position(PhysicalPosition::new(rect.0, rect.1));
@@ -123,7 +123,7 @@ pub fn setup(app: &AppHandle) {
         place_main(main, false);
     }
     start_hotkeys(app);
-    eprintln!("[shell] start gotowy");
+    crate::logi!("[shell] start gotowy");
     // główne okno pokazujemy zawsze, nawet gdy coś wyżej się nie udało
     if let Some(main) = main {
         let _ = main.show();
@@ -231,6 +231,35 @@ pub fn toggle_launcher(app: AppHandle) {
     let _ = app.emit_to("launcher", "launcher-open", ());
 }
 
+/// Przycisk zasilania na pasku: wysuwany panel nad dolną krawędzią, tuż obok paska.
+#[tauri::command]
+pub fn toggle_flyout(app: AppHandle) {
+    let Some(win) = app.get_webview_window("flyout") else { return };
+    if win.is_visible().unwrap_or(false) {
+        let _ = win.hide();
+        return;
+    }
+    if let Some(main) = app.get_webview_window("main") {
+        if let Some(m) = primary(&main) {
+            let bar = (BAR_WIDTH * m.scale).round() as i32;
+            let gap = (6.0 * m.scale).round() as i32;
+            let h = win.outer_size().map(|s| s.height as i32).unwrap_or((330.0 * m.scale) as i32);
+            // dół panelu równo z dołem ekranu (minus przerwa), bo przycisk zasilania jest na dole paska
+            let _ = win.set_position(PhysicalPosition::new(m.x + bar + gap, (m.y + m.h - h - gap).max(m.y)));
+        }
+    }
+    let _ = win.show();
+    let _ = win.set_focus();
+    let _ = app.emit_to("flyout", "flyout-open", ());
+}
+
+#[tauri::command]
+pub fn hide_flyout(app: AppHandle) {
+    if let Some(win) = app.get_webview_window("flyout") {
+        let _ = win.hide();
+    }
+}
+
 #[tauri::command]
 pub fn hide_launcher(app: AppHandle) {
     if let Some(win) = app.get_webview_window("launcher") {
@@ -255,6 +284,11 @@ pub fn start_hotkeys(app: &AppHandle) {
             crate::win::hotkey_loop(|c| {
                 if c == ' ' {
                     toggle_launcher(app.clone()); // Alt+Spacja
+                } else if c == '!' {
+                    // Ctrl+Alt+F12: skrót awaryjny, działa też gdy interfejs WikExp się zawiesił
+                    if let Err(e) = emergency_restore() {
+                        crate::loge!("[awaryjnie] {e}");
+                    }
                 } else {
                     let _ = app.emit("global-nav", c.to_string());
                 }
@@ -264,9 +298,24 @@ pub fn start_hotkeys(app: &AppHandle) {
     let _ = app;
 }
 
+/// Awaryjne przywrócenie klasycznego pulpitu: zwolnij pas AppBara, pokaż pasek Windows, uruchom explorer.exe.
+/// Gdy żadna powłoka nie działa, explorer.exe zostaje nową powłoką; WikExp dalej działa obok.
+pub fn emergency_restore() -> Result<(), String> {
+    crate::logw!("[awaryjnie] przywracam pasek Windows i uruchamiam explorer.exe");
+    #[cfg(windows)]
+    {
+        if let Some(h) = APPBAR_HWND.lock().unwrap_or_else(|e| e.into_inner()).take() {
+            crate::win::remove_appbar(h);
+        }
+        crate::win::set_taskbar_visible(true);
+        *TASKBAR_HIDDEN.lock().unwrap_or_else(|e| e.into_inner()) = false;
+    }
+    crate::safety::start_explorer()
+}
+
 /// Wołane przy wyjściu: oddaj zarezerwowany pas ekranu i przywróć pasek Windows.
 pub fn cleanup() {
-    eprintln!("[shell] sprzątanie przy wyjściu");
+    crate::logi!("[shell] sprzątanie przy wyjściu");
     #[cfg(windows)]
     {
         // zadokowane okna wracają do normalności
@@ -290,7 +339,7 @@ pub fn apply_shell_layout(app: AppHandle, hide_taskbar: bool) {
     #[cfg(windows)]
     crate::win::set_taskbar_visible(!hide_taskbar);
     *TASKBAR_HIDDEN.lock().unwrap() = hide_taskbar;
-    eprintln!("[shell] pasek Windows {}", if hide_taskbar { "ukryty" } else { "widoczny" });
+    crate::logi!("[shell] pasek Windows {}", if hide_taskbar { "ukryty" } else { "widoczny" });
     place_bar(&app, hide_taskbar);
     if let Some(main) = app.get_webview_window("main") {
         place_main(&main, hide_taskbar);
@@ -327,12 +376,74 @@ pub fn battery_status() -> Option<Battery> {
     return None;
 }
 
-/// Przycisk WikExp na pasku: przywróć i pokaż główne okno.
+/// Warstwa pulpitu: główne okno leży pod wszystkimi programami, jak tapeta.
+static DESKTOP_LAYER: AtomicBool = AtomicBool::new(false);
+
+/// Które okna zminimalizować, żeby odsłonić pulpit: wszystkie nieschowane już, poza zadokowanymi
+/// w panelach WikExp (to część układu). Wejście: (hwnd, zminimalizowane).
+fn to_minimize(windows: &[(isize, bool)], docked: &[isize]) -> Vec<isize> {
+    windows.iter().filter(|(h, min)| !*min && !docked.contains(h)).map(|(h, _)| *h).collect()
+}
+
+/// Włącza / wyłącza warstwę pulpitu (przełącznik w ustawieniach).
+#[tauri::command]
+pub fn set_desktop_layer(app: AppHandle, enabled: bool) {
+    DESKTOP_LAYER.store(enabled, Ordering::SeqCst);
+    crate::logi!("[shell] warstwa pulpitu {}", if enabled { "włączona" } else { "wyłączona" });
+    if let Some(main) = app.get_webview_window("main") {
+        let _ = main.set_always_on_bottom(enabled);
+        if enabled {
+            keep_bottom(&app);
+        }
+    }
+}
+
+/// Po aktywacji okna Windows wynosi je na wierzch; w trybie pulpitu zsuwamy je z powrotem na spód.
+pub fn keep_bottom(app: &AppHandle) {
+    if !DESKTOP_LAYER.load(Ordering::SeqCst) {
+        return;
+    }
+    #[cfg(windows)]
+    if let Some(Ok(h)) = app.get_webview_window("main").map(|m| m.hwnd()) {
+        crate::win::lower_window(h.0 as isize);
+    }
+    let _ = app;
+}
+
+/// Przycisk WikExp na pasku: pokaż główne okno. W trybie pulpitu najpierw chowa (minimalizuje)
+/// pozostałe programy, bo samo okno leży na spodzie i inaczej nie byłoby widać.
 #[tauri::command]
 pub fn show_main(app: AppHandle) {
+    let layer = DESKTOP_LAYER.load(Ordering::SeqCst);
+    #[cfg(windows)]
+    if layer {
+        let docked: Vec<isize> = DOCKED.lock().unwrap().as_ref().map(|m| m.keys().copied().collect()).unwrap_or_default();
+        let wins: Vec<(isize, bool)> = crate::win::list_windows().iter().map(|w| (w.hwnd, w.minimized)).collect();
+        let list = to_minimize(&wins, &docked);
+        crate::logi!("[shell] pokaż pulpit: minimalizuję {} okien", list.len());
+        for h in list {
+            crate::win::minimize_window(h);
+        }
+    }
     if let Some(main) = app.get_webview_window("main") {
         let _ = main.unminimize();
         let _ = main.show();
         let _ = main.set_focus();
+    }
+    if layer {
+        keep_bottom(&app);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::to_minimize;
+
+    #[test]
+    fn minimalizuje_tylko_widoczne_niezadokowane() {
+        let wins = [(1, false), (2, true), (3, false), (4, false)];
+        assert_eq!(to_minimize(&wins, &[3]), vec![1, 4]);
+        assert!(to_minimize(&[], &[]).is_empty());
+        assert!(to_minimize(&[(5, true)], &[]).is_empty());
     }
 }

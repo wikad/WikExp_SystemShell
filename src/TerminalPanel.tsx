@@ -7,7 +7,9 @@ import { ptyKill, ptySpawn, ptyWrite, ptyResize } from "./api";
 import { fontStack, useSettings, xtermTheme } from "./settings";
 
 // sessionId = id panelu; każdy panel terminala ma własny shell w Ruście
-export function TerminalPanel({ sessionId, active }: { sessionId: string; active: boolean }) {
+// autorun = komenda wpisywana do shella zaraz po starcie (panel "claude": `claude`)
+// cwd = folder startowy shella (czytany tylko przy starcie sesji)
+export function TerminalPanel({ sessionId, active, autorun, cwd, shell }: { sessionId: string; active: boolean; autorun?: string; cwd?: string | null; shell?: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
   // term w ref, żeby efekt fokusu (niżej) miał do niego dostęp
   const termRef = useRef<Terminal | null>(null);
@@ -15,6 +17,8 @@ export function TerminalPanel({ sessionId, active }: { sessionId: string; active
   const { settings, palette } = useSettings();
   const cfgRef = useRef({ settings, palette });
   cfgRef.current = { settings, palette };
+  const startRef = useRef({ autorun, cwd, shell });
+  startRef.current = { autorun, cwd, shell };
 
   // 1) tworzenie terminala + połączenie z PTY w Ruście (raz)
   useEffect(() => {
@@ -51,8 +55,13 @@ export function TerminalPanel({ sessionId, active }: { sessionId: string; active
     let unlisteners: Array<() => void> = [];
 
     const spawn = () =>
-      ptySpawn(sessionId, term.cols, term.rows, cfgRef.current.settings.shell).catch((e) =>
-        term.write(`\x1b[31m${String(e)}\x1b[0m\r\n`));
+      ptySpawn(sessionId, term.cols, term.rows, startRef.current.shell ?? cfgRef.current.settings.shell, startRef.current.cwd ?? null)
+        .then(() => {
+          // komenda startowa trafia do wejścia shella, który ją wykona, gdy będzie gotowy
+          const cmd = startRef.current.autorun;
+          if (cmd) setTimeout(() => { if (!disposed) ptyWrite(sessionId, cmd + "\r").catch(() => {}); }, 300);
+        })
+        .catch((e) => term.write(`\x1b[31m${String(e)}\x1b[0m\r\n`));
 
     // wejście: każdy klawisz prosto do shella; po zakończeniu shella Enter startuje nowy
     const onData = term.onData((d) => {

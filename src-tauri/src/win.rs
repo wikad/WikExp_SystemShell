@@ -292,6 +292,14 @@ pub fn minimize_window(hwnd: isize) {
     }
 }
 
+/// Zsuwa okno na sam spód kolejności Z, bez aktywowania go (warstwa pulpitu).
+pub fn lower_window(hwnd: isize) {
+    use windows_sys::Win32::UI::WindowsAndMessaging::HWND_BOTTOM;
+    unsafe {
+        SetWindowPos(hwnd as HWND, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    }
+}
+
 pub fn close_window(hwnd: isize) {
     unsafe {
         PostMessageW(hwnd as HWND, WM_CLOSE, 0, 0);
@@ -425,19 +433,26 @@ pub fn undock(hwnd: isize, saved: &Saved) {
 /// Rejestruje Alt+H/J/K/L i Alt+Spacja dla całego systemu i blokuje wątek w pętli komunikatów.
 /// `on_key` dostaje 'h' / 'j' / 'k' / 'l' / ' '. Uruchamiać w osobnym wątku.
 pub fn hotkey_loop(on_key: impl Fn(char)) {
-    use windows_sys::Win32::UI::Input::KeyboardAndMouse::{RegisterHotKey, MOD_ALT, MOD_NOREPEAT};
+    use windows_sys::Win32::Foundation::GetLastError;
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::{RegisterHotKey, MOD_ALT, MOD_CONTROL, MOD_NOREPEAT};
     use windows_sys::Win32::UI::WindowsAndMessaging::{GetMessageW, MSG, WM_HOTKEY};
     unsafe {
-        // Alt+H/J/K/L = panele, Alt+Spacja = launcher
-        let keys = [('h', 0x48u32), ('j', 0x4A), ('k', 0x4B), ('l', 0x4C), (' ', 0x20)];
-        for (i, (_, vk)) in keys.iter().enumerate() {
+        // Alt+H/J/K/L = panele, Alt+Spacja = launcher, Ctrl+Alt+F12 = awaryjny explorer ('!').
+        // Ctrl+Alt+F12 zamiast litery, bo na polskiej klawiaturze Ctrl+Alt to AltGr (Ctrl+Alt+E = "ę").
+        let keys = [
+            ('h', 0x48u32, MOD_ALT), ('j', 0x4A, MOD_ALT), ('k', 0x4B, MOD_ALT), ('l', 0x4C, MOD_ALT),
+            (' ', 0x20, MOD_ALT), ('!', 0x7B, MOD_CONTROL | MOD_ALT),
+        ];
+        for (i, (c, vk, mods)) in keys.iter().enumerate() {
             // null jako okno: WM_HOTKEY trafia do kolejki tego wątku
-            RegisterHotKey(std::ptr::null_mut(), i as i32 + 1, MOD_ALT | MOD_NOREPEAT, *vk);
+            if RegisterHotKey(std::ptr::null_mut(), i as i32 + 1, *mods | MOD_NOREPEAT, *vk) == 0 {
+                crate::logw!("[hotkey] nie udało się zarejestrować skrótu {:?} (błąd {})", c, GetLastError());
+            }
         }
         let mut msg: MSG = std::mem::zeroed();
         while GetMessageW(&mut msg, std::ptr::null_mut(), 0, 0) > 0 {
             if msg.message == WM_HOTKEY {
-                if let Some((c, _)) = keys.get(msg.wParam.wrapping_sub(1)) {
+                if let Some((c, _, _)) = keys.get(msg.wParam.wrapping_sub(1)) {
                     on_key(*c);
                 }
             }
@@ -508,9 +523,14 @@ pub fn file_icon(path: &str) -> Option<String> {
 /// Uruchamia program, skrót, plik albo adres (np. "ms-settings:") tak jak dwuklik w Windows.
 /// Aplikacje ze Sklepu ("shell:AppsFolder\\<AppID>") idą przez explorer.exe: tak robi menu Start.
 pub fn launch(target: &str) -> Result<(), String> {
+    launch_verb(target, "open")
+}
+
+/// To samo z wybraną czynnością: "open" = domyślny program, "openas" = okno „Otwórz za pomocą”.
+pub fn launch_verb(target: &str, verb: &str) -> Result<(), String> {
     use windows_sys::Win32::UI::Shell::ShellExecuteW;
     use windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
-    let verb = wide("open");
+    let verb = wide(verb);
     let (file, params) = if target.starts_with("shell:") { (wide("explorer.exe"), Some(wide(target))) } else { (wide(target), None) };
     let params_ptr = params.as_ref().map_or(std::ptr::null(), |p| p.as_ptr());
     let r = unsafe {

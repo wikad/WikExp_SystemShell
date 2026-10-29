@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { dockerAction, dockerList, type Container, type DockerAction } from "./api";
+import { dockerAction, dockerList, type Container, type DockerAction, type Source } from "./api";
+import { SourceBar } from "./SourceBar";
 
 const REFRESH_MS = 3000;
 
@@ -12,7 +13,7 @@ const STATE_ICON: Record<string, [string, string]> = {
   dead: ["✕", "red"],
 };
 
-export function DockerPanel({ active }: { active: boolean }) {
+export function DockerPanel({ active, source, onSource }: { active: boolean; source: Source; onSource: (s: Source) => void }) {
   const [items, setItems] = useState<Container[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -21,16 +22,23 @@ export function DockerPanel({ active }: { active: boolean }) {
   const [msg, setMsg] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
+  // odpowiedź po zmianie źródła (spóźniona) nie może nadpisać nowej listy
+  const srcRef = useRef(source);
+  srcRef.current = source;
   const refresh = useCallback(
-    () => dockerList()
-      .then((c) => { setItems(c); setError(null); })
-      .catch((e) => { setItems([]); setError(String(e)); }),
-    [],
+    () => dockerList(source)
+      .then((c) => { if (srcRef.current === source) { setItems(c); setError(null); } })
+      .catch((e) => { if (srcRef.current === source) { setItems([]); setError(String(e)); } }),
+    [source],
   );
 
   useEffect(() => {
+    setItems([]);
+    setError(null);
+    setSelectedId(null);
     refresh();
-    const id = setInterval(refresh, REFRESH_MS);
+    // przez wsl.exe każde odpytanie jest wolniejsze, więc rzadziej
+    const id = setInterval(refresh, source === "win" ? REFRESH_MS : REFRESH_MS * 2);
     return () => clearInterval(id);
   }, [refresh]);
 
@@ -49,7 +57,7 @@ export function DockerPanel({ active }: { active: boolean }) {
 
   const run = (c: Container, action: DockerAction) => {
     setBusy(c.id);
-    dockerAction(c.id, action)
+    dockerAction(c.id, action, source)
       .then(() => setMsg(`${action} ${c.name}: ok`))
       .catch((e) => setMsg(String(e)))
       .finally(() => { setBusy(null); refresh(); });
@@ -82,18 +90,24 @@ export function DockerPanel({ active }: { active: boolean }) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [active, rows, selected, current, busy, confirmRm]);
+  }, [active, rows, selected, current, busy, confirmRm, source]);
 
   useEffect(() => {
     listRef.current?.querySelector(".row.sel")?.scrollIntoView({ block: "nearest" });
   }, [selected, active]);
 
   if (error) {
-    return <div className="row muted">{error}</div>;
+    return (
+      <>
+        <SourceBar source={source} onSource={onSource} active={active} />
+        <div className="row muted">{error}</div>
+      </>
+    );
   }
 
   return (
     <div ref={listRef}>
+      <SourceBar source={source} onSource={onSource} active={active} />
       {confirmRm && current && <div className="row red">x jeszcze raz = usuń {current.name}</div>}
       {msg && <div className="row yellow">{msg}</div>}
       {rows.length === 0 && <div className="row muted">brak kontenerów</div>}

@@ -1,7 +1,7 @@
 // Logika układu paneli: siatka COLS×ROWS, każdy panel to prostokąt w komórkach.
 // Czyste funkcje bez Reacta, żeby łatwo je testować.
 
-export type PanelKind = "tree" | "files" | "terminal" | "side" | "docker" | "monitor" | "settings" | "app" | "git" | "search";
+export type PanelKind = "tree" | "files" | "terminal" | "side" | "docker" | "monitor" | "settings" | "app" | "git" | "search" | "claude" | "wsl" | "wslmgr";
 // id = konkretna instancja ("terminal", "terminal-2"), kind = rodzaj panelu
 export type PanelId = string;
 export type Rect = {
@@ -19,7 +19,7 @@ export const MIN_W = 3;
 export const MIN_H = 2;
 
 export const PANEL_NAMES: Record<PanelKind, string> = {
-  tree: "drzewo", files: "pliki", terminal: "terminal", side: "procesy", docker: "docker", monitor: "monitor", settings: "ustawienia", app: "okno programu", git: "git", search: "szukaj",
+  tree: "drzewo", files: "pliki", terminal: "terminal", side: "procesy", docker: "docker", monitor: "monitor", settings: "ustawienia", app: "okno programu", git: "git", search: "szukaj", claude: "claude", wsl: "terminal wsl", wslmgr: "dystrybucje wsl",
 };
 export const ALL_KINDS = Object.keys(PANEL_NAMES) as PanelKind[];
 

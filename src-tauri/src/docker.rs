@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use std::process::Command;
 
 /// Jeden kontener z `docker ps -a --format "{{json .}}"`.
 /// Docker zwraca pola z wielkiej litery, `rename` mapuje je na nasze nazwy.
@@ -20,21 +19,22 @@ pub struct Container {
 }
 
 /// Uruchamia `docker <args>` bez migającego okna konsoli i zwraca stdout.
-fn docker(args: &[&str]) -> Result<String, String> {
-    let mut cmd = Command::new("docker");
-    cmd.args(args);
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-        cmd.creation_flags(CREATE_NO_WINDOW);
-    }
-    let out = cmd
-        .output()
-        .map_err(|_| "docker nie jest zainstalowany albo nie ma go w PATH".to_string())?;
+/// backend: "win" (Docker z Windowsa), "wsl" albo "wsl:Nazwa" (docker wewnątrz dystrybucji WSL).
+fn docker(backend: &str, args: &[&str]) -> Result<String, String> {
+    let mut cmd = crate::wsl::command(backend, "docker", args)?;
+    let wsl = backend != "win";
+    let out = cmd.output().map_err(|_| {
+        if wsl { "wsl.exe nie jest dostępne (WSL nie jest zainstalowany?)".to_string() }
+        else { "docker nie jest zainstalowany albo nie ma go w PATH".to_string() }
+    })?;
     if !out.status.success() {
-        let err = String::from_utf8_lossy(&out.stderr).trim().to_string();
-        return Err(if err.contains("pipe") || err.contains("daemon") {
+        let err = crate::wsl::first_line(&crate::wsl::decode(&out.stderr));
+        let low = err.to_lowercase();
+        return Err(if wsl && (low.contains("no such file") || low.contains("not found") || low.contains("execvpe")) {
+            "docker nie jest zainstalowany w tej dystrybucji WSL".to_string()
+        } else if wsl {
+            if err.is_empty() { "docker w WSL zwrócił błąd".to_string() } else { err }
+        } else if err.contains("pipe") || err.contains("daemon") {
             "Docker Desktop nie działa".to_string()
         } else {
             err
@@ -46,9 +46,10 @@ fn docker(args: &[&str]) -> Result<String, String> {
 // `docker` potrafi myśleć sekundę i dłużej, więc odpalamy go w puli wątków
 // blokujących, żeby nie zablokować runtime'u Tauri.
 #[tauri::command]
-pub async fn docker_list() -> Result<Vec<Container>, String> {
-    tauri::async_runtime::spawn_blocking(|| {
-        let out = docker(&["ps", "-a", "--no-trunc", "--format", "{{json .}}"])?;
+pub async fn docker_list(backend: Option<String>) -> Result<Vec<Container>, String> {
+    let backend = backend.unwrap_or_else(|| "win".into());
+    tauri::async_runtime::spawn_blocking(move || {
+        let out = docker(&backend, &["ps", "-a", "--no-trunc", "--format", "{{json .}}"])?;
         out.lines()
             .filter(|l| !l.trim().is_empty())
             .map(|l| serde_json::from_str::<Container>(l).map_err(|e| e.to_string()))
@@ -59,13 +60,14 @@ pub async fn docker_list() -> Result<Vec<Container>, String> {
 }
 
 #[tauri::command]
-pub async fn docker_action(id: String, action: String) -> Result<(), String> {
+pub async fn docker_action(id: String, action: String, backend: Option<String>) -> Result<(), String> {
+    let backend = backend.unwrap_or_else(|| "win".into());
     // tylko znane akcje: nie przepuszczamy dowolnych argumentów do dockera
     let verb = match action.as_str() {
         "start" | "stop" | "restart" | "rm" => action,
         _ => return Err(format!("nieznana akcja: {action}")),
     };
-    tauri::async_runtime::spawn_blocking(move || docker(&[&verb, &id]).map(|_| ()))
+    tauri::async_runtime::spawn_blocking(move || docker(&backend, &[&verb, &id]).map(|_| ()))
         .await
         .map_err(|e| e.to_string())?
 }
