@@ -6,6 +6,8 @@ import "./App.css";
 import { TerminalPanel } from "./TerminalPanel";
 import { ClaudePanel } from "./ClaudePanel";
 import { WslPanel } from "./WslPanel";
+import { KanbanPanel } from "./KanbanPanel";
+import { CalendarPanel } from "./CalendarPanel";
 import { TreePanel } from "./TreePanel";
 import { FilesPanel, type OpenFile } from "./FilesPanel";
 import { ProcessesPanel } from "./ProcessesPanel";
@@ -81,7 +83,7 @@ function findNeighbor(from: PanelId, dir: Dir, recent: PanelId[]): PanelId | nul
 
 const MODE: Record<PanelKind | "editor", string> = {
     editor: "EDYCJA",
-    tree: "NORMAL", files: "NORMAL", terminal: "TERMINAL", side: "PROCESY", docker: "DOCKER", monitor: "MONITOR", settings: "USTAWIENIA", app: "PROGRAM", git: "GIT", search: "SZUKAJ", claude: "CLAUDE", wsl: "WSL", wslmgr: "WSL",
+    tree: "NORMAL", files: "NORMAL", terminal: "TERMINAL", side: "PROCESY", docker: "DOCKER", monitor: "MONITOR", settings: "USTAWIENIA", app: "PROGRAM", git: "GIT", search: "SZUKAJ", claude: "CLAUDE", wsl: "WSL", wslmgr: "WSL", kanban: "PLAN", calendar: "KALENDARZ",
   };
 
 // ostatnie foldery paneli plików, żeby po restarcie każdy wrócił tam, gdzie był
@@ -451,6 +453,10 @@ export default function App() {
         return { title: srcTitle(r), tone: toneOf(r), body: <ProcessesPanel active={isActive} source={sources[r.id] ?? "win"} onSource={(s) => setSourceOf(r.id, s)} /> };
       case "docker":
         return { title: srcTitle(r), tone: toneOf(r), body: <DockerPanel active={isActive} source={sources[r.id] ?? "win"} onSource={(s) => setSourceOf(r.id, s)} /> };
+      case "kanban":
+        return { title: instanceTitle(r), body: <KanbanPanel id={r.id} active={isActive} /> };
+      case "calendar":
+        return { title: instanceTitle(r), body: <CalendarPanel id={r.id} active={isActive} /> };
       case "wslmgr":
         return { title: instanceTitle(r), body: <WslPanel active={isActive} /> };
       case "app":

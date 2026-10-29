@@ -8,6 +8,7 @@ mod safety;
 mod watchdog;
 mod autostart;
 mod power;
+mod plan;
 mod pty;
 mod procs;
 mod docker;
@@ -211,7 +212,7 @@ pub fn run() {
         .manage(pty::PtyState::default())
         .manage(procs::ProcState::default())
         .manage(monitor::MonitorState::default())
-        .invoke_handler(tauri::generate_handler![greet, log_write, get_log_path, shell_status, shell_set, emergency_explorer, autostart_list, power::power_action, read_dir,parent_dir, read_text_file, write_text_file, read_file_bytes, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, procs::list_processes, procs::kill_processes, docker::docker_list, docker::docker_action, wsl::wsl_list, wsl::wsl_action, monitor::system_stats, shell::apply_shell_layout, shell::list_windows, shell::window_action, shell::show_main, shell::set_desktop_layer, shell::battery_status, shell::dock_window, shell::undock_window, shell::focus_main, shell::style_docked, shell::toggle_launcher, shell::hide_launcher, shell::toggle_flyout, shell::hide_flyout, launcher::list_apps, launcher::app_icons, launcher::launch_app, launcher::open_path, git::git_status, git::git_diff, git::git_stage, git::git_stage_all, git::git_commit, git::git_sync, git::git_branches, git::git_checkout, git::git_log, git::git_show, search::search_files])
+        .invoke_handler(tauri::generate_handler![greet, log_write, get_log_path, shell_status, shell_set, emergency_explorer, autostart_list, power::power_action, plan::plan_load, plan::plan_save, plan::plan_stat, read_dir,parent_dir, read_text_file, write_text_file, read_file_bytes, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, procs::list_processes, procs::kill_processes, docker::docker_list, docker::docker_action, wsl::wsl_list, wsl::wsl_action, monitor::system_stats, shell::apply_shell_layout, shell::list_windows, shell::window_action, shell::show_main, shell::set_desktop_layer, shell::battery_status, shell::dock_window, shell::undock_window, shell::focus_main, shell::style_docked, shell::toggle_launcher, shell::hide_launcher, shell::toggle_flyout, shell::hide_flyout, launcher::list_apps, launcher::app_icons, launcher::launch_app, launcher::open_path, git::git_status, git::git_diff, git::git_stage, git::git_stage_all, git::git_commit, git::git_sync, git::git_branches, git::git_checkout, git::git_log, git::git_show, search::search_files])
         .setup(|app| {
             shell::setup(app.handle()); // pasek boczny + główne okno na pełny ekran
             autostart::run_if_first_start(); // tylko jako powłoka, raz po zalogowaniu

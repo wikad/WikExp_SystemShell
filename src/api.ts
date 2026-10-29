@@ -120,3 +120,8 @@ export type SearchFile = { path: string; rel: string; hits: SearchHit[] };
 export type SearchResult = { files: SearchFile[]; total: number; scanned: number; truncated: boolean; cancelled: boolean };
 export const searchFiles = (root: string, query: string, caseSensitive: boolean, wholeWord: boolean, regex: boolean) =>
   invoke<SearchResult>("search_files", { root, query, caseSensitive, wholeWord, regex });
+
+export interface PlanFile { text: string | null; mtime: number; dir: string; path: string }
+export const planLoad = () => invoke<PlanFile>("plan_load");
+export const planSave = (text: string, backupTag: string) => invoke<number>("plan_save", { text, backupTag });
+export const planStat = () => invoke<number>("plan_stat");
